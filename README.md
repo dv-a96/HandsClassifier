@@ -19,6 +19,7 @@ For every recorded session, the following files were generated:
 `vidname_accel.csv:` Accelerometer data (X, Y, Z axes) with corresponding timestamps.
 
 `vidname_gyro.csv:` Gyroscope data (X, Y, Z axes) with corresponding timestamps.
+
 Each CSV file consists of four columns: three representing the spatial axes ($X, Y, Z$) and one for the high-precision timestamps used for synchronization.
 
 ___
