@@ -1,6 +1,7 @@
 import os
 import glob
 import pandas as pd
+import matplotlib.pyplot as plt
 
 def summarize_dataframe(df: pd.DataFrame, pattern: str) -> pd.DataFrame:
     """Return a summary table with basic statistics for each column.
@@ -52,6 +53,48 @@ def process_file(path: str, pattern: str) -> None:
         print("No numeric columns to summarize.")
     else:
         print(summary.to_string())
+
+
+def collect_data_for_root(root_dir: str) -> dict:
+    """Collect statistics data for a root directory."""
+    data = {"accel": {}, "gyro": {}}
+    
+    if not os.path.isdir(root_dir):
+        return data
+    
+    for subdir in sorted(os.listdir(root_dir)):
+        subpath = os.path.join(root_dir, subdir)
+        if not os.path.isdir(subpath):
+            continue
+        
+        patterns = [("*accel.csv", "accel"), ("*gyro.csv", "gyro")]
+        for pat, file_type in patterns:
+            for filepath in glob.glob(os.path.join(subpath, pat)):
+                try:
+                    df = pd.read_csv(filepath, header=None)
+                except Exception as e:
+                    continue
+                
+                # Assign column names
+                if file_type == "accel":
+                    col_names = ["accel_x", "accel_y", "accel_z", "timestamp"]
+                else:
+                    col_names = ["gyro_x", "gyro_y", "gyro_z", "timestamp"]
+                df.columns = col_names[:len(df.columns)]
+                
+                # Extract numeric columns only
+                df_numeric = df.select_dtypes(include=["number"])
+                
+                # Store statistics
+                file_key = os.path.basename(filepath)
+                data[file_type][file_key] = {
+                    "count": df_numeric.count().to_dict(),
+                    "mean": df_numeric.mean().to_dict(),
+                }
+    
+    return data
+
+
 
 
 def compare_statistics_in_root(root_dir: str) -> None:
@@ -130,6 +173,43 @@ def compare_statistics_in_root(root_dir: str) -> None:
                 print(comparison_df.to_string(index=False))
 
 
+def plot_left_vs_right_comparison(left_data, right_data):
+    """Plot bar charts comparing mean values between Left and Right directories for each axis."""
+    fig, axes = plt.subplots(2, 4, figsize=(16, 8))  # 2 rows (accel/gyro), 4 columns (x,y,z,timestamp)
+    fig.suptitle('Comparison of Mean Values: Left vs Right Directories', fontsize=16)
+    
+    axes = axes.flatten()
+    plot_idx = 0
+    
+    for file_type in ["accel", "gyro"]:
+        for axis in ["x", "y", "z", "timestamp"]:
+            col_name = f"{file_type}_{axis}"
+            
+            # Collect means for Left and Right
+            left_means = [stats["mean"].get(col_name, 0) for stats in left_data[file_type].values()]
+            right_means = [stats["mean"].get(col_name, 0) for stats in right_data[file_type].values()]
+            
+            if not left_means and not right_means:
+                continue
+            
+            # Calculate average means
+            left_avg = sum(left_means) / len(left_means) if left_means else 0
+            right_avg = sum(right_means) / len(right_means) if right_means else 0
+            
+            # Bar plot
+            ax = axes[plot_idx]
+            ax.bar(['Left', 'Right'], [left_avg, right_avg], color=['blue', 'red'])
+            ax.set_title(f'{col_name.upper()} Mean')
+            ax.set_ylabel('Mean Value')
+            ax.grid(True, alpha=0.3)
+            
+            plot_idx += 1
+    
+    plt.tight_layout()
+    plt.savefig('left_vs_right_comparison.png', dpi=150, bbox_inches='tight')
+    print("Plot saved as 'left_vs_right_comparison.png'")
+    plt.close()
+
 
 def walk_and_analyze(root_dirs):
     """Walk through given root directories and analyze accel/gyro files."""
@@ -159,12 +239,22 @@ def main():
     # Individual file analysis
     walk_and_analyze(dirs)
     
+    # Collect data for comparison
+    left_data = collect_data_for_root(dirs[0])
+    right_data = collect_data_for_root(dirs[1])
+    
     # Comparison analysis for each root directory
     print(f"\n\n{'#'*80}")
     print("COMPARISON TABLES FOR EACH ROOT DIRECTORY")
     print(f"{'#'*80}")
     for root_dir in dirs:
         compare_statistics_in_root(root_dir)
+    
+    # Plot comparison
+    print(f"\n\n{'#'*80}")
+    print("PLOTTING LEFT VS RIGHT COMPARISON")
+    print(f"{'#'*80}")
+    plot_left_vs_right_comparison(left_data, right_data)
 
 
 if __name__ == "__main__":
