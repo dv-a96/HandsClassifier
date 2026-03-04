@@ -6,11 +6,11 @@ This project aims to detect handedness (which hand is holding the device) during
 The dataset was collected using the OpenCamera Sensors application [^1] [^2], which enables synchronized recording of IMU sensor data alongside video footage.
 To ensure consistency across the dataset, a standardized movement protocol was followed for both left and right-hand recordings:
 
-*Initial Position:* The device is held with a straight arm directly in front of the face.
+**Initial Position:** The device is held with a straight arm directly in front of the face.
 
-*Movement:* The device is brought toward the nose and then extended back to the initial position.
+**Movement:** The device is brought toward the nose and then extended back to the initial position.
 
-*Variations:* Data was captured in both sitting and standing postures.
+**Variations:** Data was captured in both sitting and standing postures.
 
 For every recorded session, the following files were generated:
 
