@@ -36,7 +36,7 @@ This allows for identification of differences in sensor behavior between left-ha
 ### Visualization
 The script generates a comprehensive visualization saved as `left_vs_right_comparison.png`, which includes 6 subplots (3 for accelerometer and 3 for gyroscope) for all the axis of the sensors. Each subplot contain the mean value over the spesific axes for all the files:
 
-![left vs right sensors values plot](HandsDetection/left_vs_right_comparison.png)
+![left vs right sensors values plot](/left_vs_right_comparison.png)
 
 This visualization helps identify patterns and differences in accelerometer and gyroscope readings between left and right-handed device usage.
 
