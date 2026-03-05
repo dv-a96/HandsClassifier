@@ -22,6 +22,24 @@ For every recorded session, the following files were generated:
 
 Each CSV file consists of four columns: three representing the spatial axes ($X, Y, Z$) and one for the high-precision timestamps used for synchronization.
 
+## Data Analysis
+The `analyze_data.py` script provides comprehensive statistical analysis of the IMU sensor data collected during the study.
+
+### Comparative Analysis
+The script conducts a comparison of sensor data between Left and Right hand recordings by:
+1. Collecting statistics from all files within each directory (Left/Right subdirectories)
+2. Grouping data by file type (accelerometer/gyroscope) and axis (X, Y, Z)
+3. Displaying comparison tables showing count and mean values for each file
+
+This allows for identification of differences in sensor behavior between left-handed and right-handed recordings.
+
+### Visualization
+The script generates a comprehensive visualization saved as `left_vs_right_comparison.png`, which includes 6 subplots (3 for accelerometer and 3 for gyroscope) for all the axis of the sensors. Each subplot contain the mean value over the spesific axes for all the files:
+
+![left vs right sensors values plot](HandsDetection/left_vs_right_comparison.png)
+
+This visualization helps identify patterns and differences in accelerometer and gyroscope readings between left and right-handed device usage.
+
 ___
 [^1] A. Akhmetyanov, A. Kornilova, M. Faizullin, D. Pozo and G. Ferrer, "Sub-millisecond Video Synchronization of Multiple Android Smartphones," 2021 IEEE Sensors, 2021, pp. 1-4
 
