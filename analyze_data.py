@@ -174,34 +174,51 @@ def compare_statistics_in_root(root_dir: str) -> None:
 
 
 def plot_left_vs_right_comparison(left_data, right_data):
-    """Plot bar charts comparing mean values between Left and Right directories for each axis."""
-    fig, axes = plt.subplots(2, 4, figsize=(16, 8))  # 2 rows (accel/gyro), 4 columns (x,y,z,timestamp)
-    fig.suptitle('Comparison of Mean Values: Left vs Right Directories', fontsize=16)
+    """Plot bar charts comparing mean values per file for each axis."""
+    fig, axes = plt.subplots(2, 3, figsize=(18, 10))  # 2 rows (accel/gyro), 3 columns (x,y,z)
+    fig.suptitle('Mean Values per File: Left vs Right Directories', fontsize=16)
     
     axes = axes.flatten()
     plot_idx = 0
     
     for file_type in ["accel", "gyro"]:
-        for axis in ["x", "y", "z", "timestamp"]:
+        for axis in ["x", "y", "z"]:
             col_name = f"{file_type}_{axis}"
             
-            # Collect means for Left and Right
-            left_means = [stats["mean"].get(col_name, 0) for stats in left_data[file_type].values()]
-            right_means = [stats["mean"].get(col_name, 0) for stats in right_data[file_type].values()]
+            # Collect all files and their means
+            files_data = []
             
-            if not left_means and not right_means:
+            # Add Left files
+            for filename, stats in sorted(left_data[file_type].items()):
+                files_data.append({
+                    "file": f"{filename} (L)",
+                    "mean": stats["mean"].get(col_name, 0),
+                    "color": "blue"
+                })
+            
+            # Add Right files
+            for filename, stats in sorted(right_data[file_type].items()):
+                files_data.append({
+                    "file": f"{filename} (R)",
+                    "mean": stats["mean"].get(col_name, 0),
+                    "color": "red"
+                })
+            
+            if not files_data:
                 continue
-            
-            # Calculate average means
-            left_avg = sum(left_means) / len(left_means) if left_means else 0
-            right_avg = sum(right_means) / len(right_means) if right_means else 0
             
             # Bar plot
             ax = axes[plot_idx]
-            ax.bar(['Left', 'Right'], [left_avg, right_avg], color=['blue', 'red'])
-            ax.set_title(f'{col_name.upper()} Mean')
+            file_names = [d["file"] for d in files_data]
+            means = [d["mean"] for d in files_data]
+            colors = [d["color"] for d in files_data]
+            
+            ax.bar(file_names, means, color=colors, alpha=0.7)
+            ax.set_title(f'{col_name.upper()} Mean per File')
             ax.set_ylabel('Mean Value')
-            ax.grid(True, alpha=0.3)
+            ax.set_xlabel('File')
+            ax.grid(True, alpha=0.3, axis='y')
+            plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha='right', fontsize=8)
             
             plot_idx += 1
     
