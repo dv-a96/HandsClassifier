@@ -2,6 +2,7 @@ import os
 import glob
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 import cv2
 
 def summarize_dataframe(df: pd.DataFrame, pattern: str) -> pd.DataFrame:
@@ -279,66 +280,240 @@ def calculate_sampling_frequencies(csv_path, video_path):
     
     return sensor_freq, video_fps
 
+def _load_sensor_csv(csv_path: str) -> pd.DataFrame:
+    """Helper to read a sensor CSV and return a dataframe with proper columns and converted time.
 
-def plot_sampling_frequencies(sensor_freq, video_fps, title="Sampling Frequencies Comparison"):
-    """Plot a comparison of sensor and video sampling frequencies."""
-    if sensor_freq is None and video_fps is None:
-        print("No data to plot.")
-        return
-    
-    labels = []
-    values = []
-    colors = []
-    
-    if sensor_freq is not None:
-        labels.append("Sensor (Hz)")
-        values.append(sensor_freq)
-        colors.append("blue")
-    
-    if video_fps is not None:
-        labels.append("Video (FPS)")
-        values.append(video_fps)
-        colors.append("green")
-    
-    plt.figure(figsize=(8, 6))
-    plt.bar(labels, values, color=colors, alpha=0.7)
-    plt.title(title)
-    plt.ylabel("Frequency (Hz)")
-    plt.grid(True, alpha=0.3, axis='y')
-    
-    # Add value labels on bars
-    for i, v in enumerate(values):
-        plt.text(i, v + max(values) * 0.01, f"{v:.2f}", ha='center', va='bottom')
-    
-    plt.tight_layout()
-    plt.savefig('sampling_frequencies.png', dpi=150, bbox_inches='tight')
-    print("Plot saved as 'sampling_frequencies.png'")
-    plt.close()
+    The CSV is expected to contain three axes and a timestamp column representing
+    inter-sample deltas (nanoseconds).
+    """
+    df = pd.read_csv(csv_path, header=None)
+    if df.empty or df.shape[1] < 4:
+        raise ValueError(f"CSV file {csv_path} does not have enough columns.")
+
+    # Determine column names based on filename
+    if "accel" in csv_path.lower():
+        col_names = ["accel_x", "accel_y", "accel_z", "timestamp"]
+    elif "gyro" in csv_path.lower():
+        col_names = ["gyro_x", "gyro_y", "gyro_z", "timestamp"]
+    else:
+        raise ValueError(f"Unable to determine file type from {csv_path}. Expected 'accel' or 'gyro' in filename.")
+
+    df.columns = col_names[:len(df.columns)]
+    if "timestamp" not in df.columns:
+        raise ValueError(f"No timestamp column found in {csv_path}")
+
+    return df
 
 
-def plot_all_frequencies(freq_data):
-    """Plot sampling frequencies for all files in one figure."""
-    if not freq_data["sensor"]:
-        print("No frequency data to plot.")
-        return
-    
+def plot_raw_data(csv_path: str, save_path: str = None) -> plt.Figure:
+    """Create a plot of the different axes over time from a CSV file.
+
+    The figure object is returned so the caller can display, modify, or save it.
+    If ``save_path`` is provided the plot will also be written to that path.
+
+    Args:
+        csv_path: Path to the CSV file (accel or gyro).
+        save_path: Optional path to save the plot.
+    Returns:
+        A matplotlib Figure containing the drawn data.
+    """
+    try:
+        df = _load_sensor_csv(csv_path)
+        # Convert timestamp deltas -> cumulative seconds
+        df["timestamp"] = df["timestamp"].cumsum() / 1e9
+    except Exception as e:
+        print(e)
+        return None
+
+    # determine labels
+    if "accel" in csv_path.lower():
+        title = "Accelerometer Axes Over Time"
+        ylabel = "Acceleration"
+    else:
+        title = "Gyroscope Axes Over Time"
+        ylabel = "Angular Velocity"
+
     fig, ax = plt.subplots(figsize=(12, 6))
-    x = range(len(freq_data["labels"]))
-    
-    ax.bar([i - 0.2 for i in x], freq_data["sensor"], width=0.4, label='Sensor (Hz)', color='blue', alpha=0.7)
-    ax.bar([i + 0.2 for i in x], freq_data["video"], width=0.4, label='Video (FPS)', color='green', alpha=0.7)
-    
-    ax.set_xticks(x)
-    ax.set_xticklabels(freq_data["labels"], rotation=45, ha='right', fontsize=8)
-    ax.set_ylabel('Frequency (Hz)')
-    ax.set_title('Sampling Frequencies: Sensor vs Video')
+    colors = ['red', 'green', 'blue']
+    axes = ['x', 'y', 'z']
+
+    for i, axis in enumerate(axes):
+        axis_col = f"{df.columns[0].split('_')[0]}_{axis}"
+        if axis_col in df.columns:
+            ax.plot(df["timestamp"], df[axis_col], color=colors[i], label=f'{axis.upper()}-axis', linewidth=1)
+
+    ax.set_xlabel('Time (seconds)')
+    ax.set_ylabel(ylabel)
+    ax.set_title(title)
     ax.legend()
-    ax.grid(True, alpha=0.3, axis='y')
-    
-    plt.tight_layout()
-    plt.savefig('sampling_frequencies_all.png', dpi=150, bbox_inches='tight')
-    print("Plot saved as 'sampling_frequencies_all.png'")
-    plt.close()
+    ax.grid(True, alpha=0.3)
+
+    if save_path:
+        fig.savefig(save_path, dpi=150, bbox_inches='tight')
+        print(f"Plot saved as '{save_path}'")
+    return fig
+
+
+def compare_left_right_raw(left_dir: str, right_dir: str, max_files: int = 5, save_accel_path: str = None, save_gyro_path: str = None) -> dict:
+    """Generate side-by-side raw plots for both accel and gyro data.
+
+    Returns a dictionary with keys ``'accel'`` and ``'gyro'`` containing the
+    corresponding Figure objects.  Separate save paths may be provided for each
+    type.
+    """
+    figs = {}
+    figs['accel'] = plot_side_by_side_raw(left_dir, right_dir, 'accel', max_files, save_accel_path)
+    figs['gyro'] = plot_side_by_side_raw(left_dir, right_dir, 'gyro', max_files, save_gyro_path)
+    return figs
+
+
+def plot_side_by_side_raw(left_dir: str, right_dir: str, file_type: str, max_files: int = 5, save_path: str = None) -> plt.Figure:
+    """Plot raw sensor data for files from left and right directories side by side.
+
+    One figure is produced containing ``max_files`` rows and two columns.  The
+    left column shows the first ``max_files`` matching files from ``left_dir``
+    and the right column shows the first ``max_files`` matching files from
+    ``right_dir``.  Only files containing ``file_type`` ("accel" or "gyro") in
+    their name are considered.
+
+    Args:
+        left_dir: Directory containing left-hand CSV files.
+        right_dir: Directory containing right-hand CSV files.
+        file_type: "accel" or "gyro" to select the appropriate files.
+        max_files: Number of files to plot from each side.
+        save_path: Optional path to save the resulting figure.
+    Returns:
+        matplotlib Figure object with the subplots.
+    """
+    if file_type not in ("accel", "gyro"):
+        raise ValueError("file_type must be 'accel' or 'gyro'")
+
+    pattern = f"**/*{file_type}.csv"
+    left_files = sorted(glob.glob(os.path.join(left_dir, pattern), recursive=True))[:max_files]
+    right_files = sorted(glob.glob(os.path.join(right_dir, pattern), recursive=True))[:max_files]
+
+    rows = max(len(left_files), len(right_files))
+    fig, axes = plt.subplots(rows, 2, figsize=(12, rows * 2), squeeze=False)
+
+    for i in range(rows):
+        for side, files in enumerate((left_files, right_files)):
+            ax = axes[i][side]
+            if i < len(files):
+                try:
+                    df = _load_sensor_csv(files[i])
+                except Exception as e:
+                    ax.text(0.5, 0.5, str(e), ha='center', va='center')
+                    ax.set_axis_off()
+                    continue
+
+                colors = ['red', 'green', 'blue']
+                axes_names = ['x', 'y', 'z']
+                for j, axis in enumerate(axes_names):
+                    col = f"{file_type}_{axis}"
+                    if col in df.columns:
+                        ax.plot(df['timestamp'], df[col], color=colors[j], linewidth=1)
+                ax.set_title(os.path.basename(files[i]))
+                ax.set_xlabel('Time (s)')
+                ax.set_ylabel('Acceleration' if file_type == 'accel' else 'Angular Velocity')
+                ax.grid(True, alpha=0.3)
+            else:
+                ax.set_axis_off()
+    # Left column title
+    axes[0, 0].annotate('Left Hand Data', xy=(0.5, 1.3), xycoords='axes fraction',
+                    ha='center', va='center', fontsize=16, fontweight='bold')
+
+    # Right column title
+    axes[0, 1].annotate('Right Hand Data', xy=(0.5, 1.3), xycoords='axes fraction',
+                    ha='center', va='center', fontsize=16, fontweight='bold')
+    # Set global legend
+    custom_lines = [Line2D([0], [0], color='red', lw=2), Line2D([0], [0], color='green', lw=2), Line2D([0], [0], color='blue', lw=2)]
+    fig.legend(custom_lines, ['X', 'Y', 'Z'], loc='upper center', bbox_to_anchor=(0.5, 1.05), ncol=3)
+
+    fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+    if save_path:
+        fig.savefig(save_path, dpi=150, bbox_inches='tight')
+        print(f"Plot saved as '{save_path}'")
+    return fig
+
+
+def plot_axis_timeseries(left_dir: str, right_dir: str, axis: str, max_files: int = 5, save_path: str = None) -> plt.Figure:
+    """Plot timeseries for a specific axis from accel files in separate subplots.
+
+    Creates two subplots side by side: left subplot shows all left-hand files,
+    right subplot shows all right-hand files. All files on the same subplot share
+    the same timeline, each with a unique color.
+
+    Args:
+        left_dir: Directory containing left-hand accel CSV files.
+        right_dir: Directory containing right-hand accel CSV files.
+        axis: The axis to plot ('x', 'y', or 'z').
+        max_files: Maximum number of files to plot from each side.
+        save_path: Optional path to save the figure.
+    Returns:
+        matplotlib Figure object.
+    """
+    if axis not in ('x', 'y', 'z'):
+        raise ValueError("axis must be 'x', 'y', or 'z'")
+
+    pattern = "**/*accel.csv"
+    left_files = sorted(glob.glob(os.path.join(left_dir, pattern), recursive=True))[:max_files]
+    right_files = sorted(glob.glob(os.path.join(right_dir, pattern), recursive=True))[:max_files]
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+    # Colors for files
+    colors = ['red', 'orange', 'yellow', 'pink', 'purple', 'blue', 'green', 'cyan', 'magenta', 'brown']
+
+    # Plot left files
+    ax = axes[0]
+    for i, fpath in enumerate(left_files):
+        try:
+            df = _load_sensor_csv(fpath)
+            col = f"accel_{axis}"
+            if col in df.columns:
+                # Convert timestamp deltas to cumulative seconds
+                df["timestamp"] = df["timestamp"].cumsum() / 1e9
+                
+                label = os.path.basename(fpath)
+                ax.plot(df['timestamp'], df[col], color=colors[i % len(colors)],
+                        linewidth=1, label=label)
+        except Exception as e:
+            print(f"Error loading {fpath}: {e}")
+    ax.set_xlabel('Time (seconds)')
+    ax.set_ylabel('Acceleration')
+    ax.set_title(f'Left Hand - {axis.upper()}-axis')
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+
+    # Plot right files
+    ax = axes[1]
+    for i, fpath in enumerate(right_files):
+        try:
+            df = _load_sensor_csv(fpath)
+            col = f"accel_{axis}"
+            if col in df.columns:
+                # Convert timestamp deltas to cumulative seconds
+                df["timestamp"] = df["timestamp"].cumsum() / 1e9
+                
+                label = os.path.basename(fpath)
+                ax.plot(df['timestamp'], df[col], color=colors[i % len(colors)],
+                        linewidth=1, label=label)
+        except Exception as e:
+            print(f"Error loading {fpath}: {e}")
+    ax.set_xlabel('Time (seconds)')
+    ax.set_ylabel('Acceleration')
+    ax.set_title(f'Right Hand - {axis.upper()}-axis')
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+
+    fig.suptitle(f'Acceleration {axis.upper()}-axis Timeseries Comparison', fontsize=14)
+    fig.tight_layout()
+    if save_path:
+        fig.savefig(save_path, dpi=150, bbox_inches='tight')
+        print(f"Plot saved as '{save_path}'")
+    return fig
+
+
 
 
 def walk_and_analyze(root_dirs):
@@ -362,29 +537,29 @@ def walk_and_analyze(root_dirs):
 
 
 def main():
-    # default directories relative to this script
-    base = os.path.dirname(os.path.abspath(__file__))
-    dirs = [os.path.join(base, "Left"), os.path.join(base, "Right")]
+    # # default directories relative to this script
+    # base = os.path.dirname(os.path.abspath(__file__))
+    # dirs = [os.path.join(base, "Left"), os.path.join(base, "Right")]
     
-    # Individual file analysis
-    walk_and_analyze(dirs)
+    # # Individual file analysis
+    # walk_and_analyze(dirs)
     
-    # Collect data for comparison
-    left_data = collect_data_for_root(dirs[0])
-    right_data = collect_data_for_root(dirs[1])
+    # # Collect data for comparison
+    # left_data = collect_data_for_root(dirs[0])
+    # right_data = collect_data_for_root(dirs[1])
     
-    # Comparison analysis for each root directory
-    print(f"\n\n{'#'*80}")
-    print("COMPARISON TABLES FOR EACH ROOT DIRECTORY")
-    print(f"{'#'*80}")
-    for root_dir in dirs:
-        compare_statistics_in_root(root_dir)
+    # # Comparison analysis for each root directory
+    # print(f"\n\n{'#'*80}")
+    # print("COMPARISON TABLES FOR EACH ROOT DIRECTORY")
+    # print(f"{'#'*80}")
+    # for root_dir in dirs:
+    #     compare_statistics_in_root(root_dir)
     
-    # Plot comparison
-    print(f"\n\n{'#'*80}")
-    print("PLOTTING LEFT VS RIGHT COMPARISON")
-    print(f"{'#'*80}")
-    plot_left_vs_right_comparison(left_data, right_data)
+    # # Plot comparison
+    # print(f"\n\n{'#'*80}")
+    # print("PLOTTING LEFT VS RIGHT COMPARISON")
+    # print(f"{'#'*80}")
+    # plot_left_vs_right_comparison(left_data, right_data)
     
     # # Calculate and plot sampling frequencies
     # print(f"\n\n{'#'*80}")
@@ -418,6 +593,8 @@ def main():
     #                         freq_data["labels"].append(os.path.basename(csv_path))
     
     # plot_all_frequencies(freq_data)
+    compare_left_right_raw(left_dir='Left', right_dir='Right', max_files=5, save_accel_path='side_by_side_accel.png', save_gyro_path='side_by_side_gyro.png')
+    plot_axis_timeseries(left_dir='Left', right_dir='Right', axis='x', max_files=5, save_path='axis_x_timeseries.png')
 
 
 if __name__ == "__main__":
