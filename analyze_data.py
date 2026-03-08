@@ -435,6 +435,51 @@ def plot_side_by_side_raw(left_dir: str, right_dir: str, file_type: str, max_fil
         print(f"Plot saved as '{save_path}'")
     return fig
 
+def plot_hand_axis_raw(hand_dir:str, axis: str, file_type: str, max_files: int = 5, save_path: str = None) -> plt.Figure:
+    """Plot raw data for a specific hand and axis across multiple files.
+
+    Args:
+        hand_dir: Directory containing the hand's CSV files (Left or Right).
+        axis: The axis to plot ('x', 'y', or 'z').
+        file_type: "accel" or "gyro" to select the appropriate files.
+        max_files: Maximum number of files to plot.
+        save_path: Optional path to save the figure.
+    """
+    if axis not in ('x', 'y', 'z'):
+        raise ValueError("axis must be 'x', 'y', or 'z'")
+    if file_type not in ("accel", "gyro"):
+        raise ValueError("file_type must be 'accel' or 'gyro'")
+
+    pattern = f"**/*{file_type}.csv"
+    files = sorted(glob.glob(os.path.join(hand_dir, pattern), recursive=True))[:max_files]
+
+    fig, axes = plt.subplots(max_files, 1, figsize=(12, max_files), squeeze=False)
+    colors = {"x": "red", "y": "green", "z": "blue"}
+
+    for i, fpath in enumerate(files):
+        try:
+            df = _load_sensor_csv(fpath)
+            col = f"{file_type}_{axis}"
+            if col in df.columns:
+                # Convert timestamp deltas to cumulative seconds
+                df["timestamp"] = df["timestamp"].cumsum() / 1e9
+                
+                label = os.path.basename(fpath)
+                axes[i, 0].plot(df['timestamp'], df[col], color=colors[axis], linewidth=1, label=label)
+        except Exception as e:
+            print(f"Error loading {fpath}: {e}")
+    
+    axes[0, 0].set_xlabel('Time (seconds)')
+    axes[0, 0].set_ylabel('Acceleration' if file_type == 'accel' else 'Angular Velocity')
+    axes[0, 0].set_title(f'{hand_dir} - {col.upper()}-axis')
+    axes[0, 0].grid(True, alpha=0.7)
+    fig.tight_layout()
+    if save_path:
+        fig.savefig(save_path, dpi=150, bbox_inches='tight')
+        print(f"Plot saved as '{save_path}'")
+    return fig
+
+
 
 def plot_axis_timeseries(left_dir: str, right_dir: str, axis: str, max_files: int = 5, save_path: str = None) -> plt.Figure:
     """Plot timeseries for a specific axis from accel files in separate subplots.
@@ -592,9 +637,8 @@ def main():
     #                         freq_data["video"].append(video_fps or 0)
     #                         freq_data["labels"].append(os.path.basename(csv_path))
     
-    # plot_all_frequencies(freq_data)
-    compare_left_right_raw(left_dir='Left', right_dir='Right', max_files=5, save_accel_path='side_by_side_accel.png', save_gyro_path='side_by_side_gyro.png')
-    plot_axis_timeseries(left_dir='Left', right_dir='Right', axis='x', max_files=5, save_path='axis_x_timeseries.png')
+    
+    plot_hand_axis_raw("Right", "x", "accel", max_files=5, save_path="right_accel_x_axis.png")
 
 
 if __name__ == "__main__":
