@@ -406,6 +406,20 @@ def plot_hand_axis_raw(hand_dir:str, axis: str, file_type: str, max_files: int =
     if file_type not in ("accel", "gyro"):
         raise ValueError("file_type must be 'accel' or 'gyro'")
 
+    y_limits = {
+        "accel": {
+            "x": (-2, 3),
+            "y": (7.5, 11),
+            "z": (-2, 5)
+        },
+        "gyro": {
+            "x": (-1, 1),
+            "y": (-1, 1),
+            "z": (-0.5, 0.9)
+        }
+    }
+    current_ylim = y_limits[file_type][axis]
+
     # Search for files
     pattern = f"**/*{file_type}.csv"
     files = sorted(glob.glob(os.path.join(hand_dir, pattern), recursive=True))[:max_files]
@@ -464,6 +478,7 @@ def plot_hand_axis_raw(hand_dir:str, axis: str, file_type: str, max_files: int =
                     label='Savitzky-Golay')
 
             # Individual Subplot Styling
+            ax.set_ylim(current_ylim)
             ax.set_title(f"File: {os.path.basename(fpath)}", loc='left', fontsize=10)
             ax.grid(True, linestyle=':', alpha=0.6)
             ax.legend(loc='upper right', fontsize='small', ncol=3, frameon=True)
