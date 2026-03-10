@@ -3,6 +3,7 @@ import glob
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
+from scipy.signal import savgol_filter
 import cv2
 
 def summarize_dataframe(df: pd.DataFrame, pattern: str) -> pd.DataFrame:
@@ -230,56 +231,6 @@ def plot_left_vs_right_comparison(left_data, right_data):
     plt.close()
 
 
-def calculate_sampling_frequencies(csv_path, video_path):
-    """Calculate sampling frequencies for accelerometer/gyroscope from CSV and video from video file."""
-    sensor_freq = None
-    video_fps = None
-    
-    # Calculate sensor sampling frequency from CSV timestamps
-    try:
-        df = pd.read_csv(csv_path, header=None)
-        if df.empty or df.shape[1] < 4:
-            print(f"CSV file {csv_path} does not have enough columns for timestamp.")
-        else:
-            # Assign column names based on file type
-            if "accel" in csv_path:
-                col_names = ["accel_x", "accel_y", "accel_z", "timestamp"]
-            elif "gyro" in csv_path:
-                col_names = ["gyro_x", "gyro_y", "gyro_z", "timestamp"]
-            else:
-                col_names = [f"col_{i}" for i in range(len(df.columns))]
-            
-            df.columns = col_names[:len(df.columns)]
-            
-            if "timestamp" in df.columns:
-                timestamps = df["timestamp"].dropna()
-                if len(timestamps) > 1:
-                    diffs = timestamps.diff().dropna()
-                    avg_diff = diffs.mean()
-                    if avg_diff > 0:
-                        sensor_freq = 1.0 / avg_diff
-                    else:
-                        print(f"Invalid timestamp differences in {csv_path}")
-                else:
-                    print(f"Not enough timestamps in {csv_path}")
-            else:
-                print(f"No timestamp column found in {csv_path}")
-    except Exception as e:
-        print(f"Error reading CSV {csv_path}: {e}")
-    
-    # Get video frame rate
-    try:
-        cap = cv2.VideoCapture(video_path)
-        if cap.isOpened():
-            video_fps = cap.get(cv2.CAP_PROP_FPS)
-            cap.release()
-        else:
-            print(f"Could not open video file {video_path}")
-    except Exception as e:
-        print(f"Error reading video {video_path}: {e}")
-    
-    return sensor_freq, video_fps
-
 def _load_sensor_csv(csv_path: str) -> pd.DataFrame:
     """Helper to read a sensor CSV and return a dataframe with proper columns and converted time.
 
@@ -436,7 +387,10 @@ def plot_side_by_side_raw(left_dir: str, right_dir: str, file_type: str, max_fil
     return fig
 
 def plot_hand_axis_raw(hand_dir:str, axis: str, file_type: str, max_files: int = 5, save_path: str = None) -> plt.Figure:
-    """Plot raw data for a specific hand and axis across multiple files.
+    """Plot raw data for a specific hand and axis across multiple files. Plot with dual smoothing layers:
+    1. Raw Data: Faint background to show noise levels.
+    2. Moving Average: Trend line for general behavior.
+    3. Savitzky-Golay: Smooth line that preserves peaks and signal features.
 
     Args:
         hand_dir: Directory containing the hand's CSV files (Left or Right).
@@ -445,40 +399,200 @@ def plot_hand_axis_raw(hand_dir:str, axis: str, file_type: str, max_files: int =
         max_files: Maximum number of files to plot.
         save_path: Optional path to save the figure.
     """
+
+    # Validation
     if axis not in ('x', 'y', 'z'):
         raise ValueError("axis must be 'x', 'y', or 'z'")
     if file_type not in ("accel", "gyro"):
         raise ValueError("file_type must be 'accel' or 'gyro'")
 
+    # Search for files
     pattern = f"**/*{file_type}.csv"
     files = sorted(glob.glob(os.path.join(hand_dir, pattern), recursive=True))[:max_files]
+    
+    if not files:
+        print(f"No {file_type} files found in {hand_dir}")
+        return None
 
-    fig, axes = plt.subplots(max_files, 1, figsize=(12, max_files), squeeze=False)
+    # Setup the figure and axes
+    fig, axes = plt.subplots(len(files), 1, figsize=(14, 4 * len(files)), squeeze=False)
     colors = {"x": "red", "y": "green", "z": "blue"}
+    main_color = colors[axis]
 
     for i, fpath in enumerate(files):
+        ax = axes[i, 0]
         try:
+            # Assuming _load_sensor_csv is defined elsewhere in your script
             df = _load_sensor_csv(fpath)
             col = f"{file_type}_{axis}"
-            if col in df.columns:
-                # Convert timestamp deltas to cumulative seconds
-                df["timestamp"] = df["timestamp"].cumsum() / 1e9
-                
-                label = os.path.basename(fpath)
-                axes[i, 0].plot(df['timestamp'], df[col], color=colors[axis], linewidth=1, label=label)
+            
+            if col not in df.columns:
+                ax.set_title(f"Column {col} missing in {os.path.basename(fpath)}")
+                continue
+
+            # Process time axis (converting nanoseconds to seconds)
+            df["time_sec"] = df["timestamp"].cumsum() / 1e9
+            raw_data = df[col].values
+            time_axis = df["time_sec"].values
+
+            # --- Smoothing Calculations ---
+            
+            # 1. Simple Moving Average (SMA)
+            ma_window = 100
+            ma_data = df[col].rolling(window=ma_window, center=True).mean()
+            
+            # 2. Savitzky-Golay Filter
+            # window_length must be odd. Adjust 51 based on your sampling rate (Hz)
+            sg_window = min(201, len(df) // 2 * 2 - 1) 
+            if sg_window > 3:
+                savgol_data = savgol_filter(raw_data, sg_window, polyorder=2)
+            else:
+                savgol_data = raw_data
+
+            # --- Layered Plotting ---
+            
+            # Layer 1: Raw noisy data (Very faint)
+            ax.plot(time_axis, raw_data, color=main_color, alpha=0.6, 
+                    label='Raw (Noisy)', linewidth=0.8)
+            
+            # Layer 2: Moving Average (Black dashed line for trend)
+            ax.plot(time_axis, ma_data, color='black', alpha=0.8, 
+                    label=f'Moving Avg (w={ma_window})')
+            
+            # Layer 3: Savitzky-Golay (Bold solid line for filtered signal)
+            ax.plot(time_axis, savgol_data, color='Magenta', alpha=0.8, 
+                    label='Savitzky-Golay')
+
+            # Individual Subplot Styling
+            ax.set_title(f"File: {os.path.basename(fpath)}", loc='left', fontsize=10)
+            ax.grid(True, linestyle=':', alpha=0.6)
+            ax.legend(loc='upper right', fontsize='small', ncol=3, frameon=True)
+            
         except Exception as e:
-            print(f"Error loading {fpath}: {e}")
+            ax.text(0.5, 0.5, f"Error processing file: {e}", ha='center', va='center')
+
+    # --- Global Figure Styling ---
+    unit = 'm/s²' if file_type == 'accel' else 'rad/s'
     
-    axes[0, 0].set_xlabel('Time (seconds)')
-    axes[0, 0].set_ylabel('Acceleration' if file_type == 'accel' else 'Angular Velocity')
-    axes[0, 0].set_title(f'{hand_dir} - {col.upper()}-axis')
-    axes[0, 0].grid(True, alpha=0.7)
+    # Global Title
+    fig.suptitle(f'SENSOR ANALYSIS | Hand: {hand_dir.upper()} | Axis: {axis.upper()} | Mode: {file_type.upper()}', 
+                 fontsize=16, fontweight='bold', y=1.02)
+    
+    # Global X-label (Only on the bottom plot to save space)
+    axes[-1, 0].set_xlabel('Time (seconds)', fontsize=12)
+    
+    # Global Y-label positioned in the middle of the figure
+    fig.text(0.01, 0.5, f'{file_type.capitalize()} Magnitude ({unit})', 
+             va='center', rotation='vertical', fontsize=12, fontweight='bold')
+
     fig.tight_layout()
+    
     if save_path:
         fig.savefig(save_path, dpi=150, bbox_inches='tight')
-        print(f"Plot saved as '{save_path}'")
+        print(f"Enhanced plot saved to: {save_path}")
+    
     return fig
 
+
+def plot_hand_stats_bars(hand_dir: str, file_type: str, stat_name: str, max_files: int = 5, save_path: str = None) -> plt.Figure:
+    """
+    Generate bar plots for a specific statistical metric across multiple files.
+    Each file gets its own subplot showing X, Y, and Z axis values for the chosen statistic.
+
+    Args:
+        hand_dir: Directory containing the CSV files (e.g., 'Left' or 'Right').
+        file_type: "accel" or "gyro" to select the sensor data.
+        stat_name: The statistic to calculate (mean, std, variance, min, max, 
+                   delta_min_max, count_negative, count_positive).
+        max_files: Maximum number of files to process and plot.
+        save_path: Optional path to save the generated figure.
+
+    Returns:
+        matplotlib.figure.Figure: The generated figure object.
+    """
+    
+    # 1. Define and validate supported statistics
+    supported_stats = [
+        'mean', 'std', 'variance', 'min', 'max', 
+        'delta_min_max', 'count_negative', 'count_positive'
+    ]
+    if stat_name not in supported_stats:
+        raise ValueError(f"stat_name must be one of {supported_stats}")
+
+    # 2. Search for files matching the pattern
+    pattern = f"**/*{file_type}.csv"
+    files = sorted(glob.glob(os.path.join(hand_dir, pattern), recursive=True))[:max_files]
+    
+    if not files:
+        print(f"Warning: No files found in directory '{hand_dir}' matching type '{file_type}'")
+        return None
+
+    # 3. Initialize the figure (One subplot per file)
+    fig, axes = plt.subplots(len(files), 1, figsize=(10, len(files) * 3.5), squeeze=False)
+    
+    # Define axis mapping and corresponding colors
+    axes_names = ['x', 'y', 'z']
+    axis_colors = ['red', 'green', 'blue'] # X=Red, Y=Green, Z=Blue
+
+    # 4. Process each file
+    for i, fpath in enumerate(files):
+        try:
+            # Assuming _load_sensor_csv is defined in your environment
+            df = _load_sensor_csv(fpath)
+            ax = axes[i, 0]
+            
+            stat_values = []
+            for axis in axes_names:
+                col = f"{file_type}_{axis}"
+                if col in df.columns:
+                    series = df[col]
+                    
+                    # Logic for calculating the specific statistic
+                    if stat_name == 'mean': val = series.mean()
+                    elif stat_name == 'std': val = series.std()
+                    elif stat_name == 'variance': val = series.var()
+                    elif stat_name == 'min': val = series.min()
+                    elif stat_name == 'max': val = series.max()
+                    elif stat_name == 'delta_min_max': val = series.max() - series.min()
+                    elif stat_name == 'count_negative': val = (series < 0).sum()
+                    elif stat_name == 'count_positive': val = (series > 0).sum()
+                    
+                    stat_values.append(val)
+                else:
+                    stat_values.append(0) # Default for missing columns
+
+            # 5. Create the Bar Plot
+            bars = ax.bar(axes_names, stat_values, color=axis_colors, alpha=0.8, edgecolor='black', linewidth=1.2)
+            
+            # Add value labels on top of each bar for clarity
+            label_format = '%d' if 'count' in stat_name else '%.3f'
+            ax.bar_label(bars, fmt=label_format, padding=3, fontsize=10, fontweight='bold')
+            
+            # Subplot styling
+            ax.set_title(f"File: {os.path.basename(fpath)}", fontsize=12, loc='left')
+            ax.set_ylabel(stat_name.replace('_', ' ').title())
+            ax.grid(axis='y', linestyle='--', alpha=0.5)
+            
+            # Add a reference line at 0 for stats that can be negative
+            ax.axhline(0, color='black', linewidth=0.8)
+
+        except Exception as e:
+            # Display error message within the subplot if file loading fails
+            axes[i, 0].text(0.5, 0.5, f"Error processing file: {e}", 
+                           ha='center', va='center', color='red')
+
+    # 6. Global figure styling
+    main_title = f"{hand_dir.upper()} Hand Data - {file_type.upper()} {stat_name.replace('_', ' ').title()}"
+    fig.suptitle(main_title, fontsize=16, fontweight='bold', y=1.02)
+    
+    fig.tight_layout()
+    
+    # 7. Save figure if a path is provided
+    if save_path:
+        fig.savefig(save_path, dpi=150, bbox_inches='tight')
+        print(f"Statistics plot successfully saved to: {save_path}")
+        
+    return fig
 
 
 def plot_axis_timeseries(left_dir: str, right_dir: str, axis: str, max_files: int = 5, save_path: str = None) -> plt.Figure:
@@ -638,8 +752,11 @@ def main():
     #                         freq_data["labels"].append(os.path.basename(csv_path))
     
     
-    plot_hand_axis_raw("Right", "x", "accel", max_files=5, save_path="right_accel_x_axis.png")
-
+    for hand in ['Left', 'Right']:
+        for file_type in ['accel', 'gyro']:
+            for axis in ['x', 'y', 'z']:
+                plot_hand_axis_raw(hand_dir=hand, axis=axis, file_type=file_type, max_files=5, save_path=f"Figures/{hand.lower()}_{file_type}_{axis}_axis.png")
+                
 
 if __name__ == "__main__":
     main()
