@@ -528,7 +528,7 @@ def plot_hand_stats_bars(hand_dir: str, file_type: str, stat_name: str, max_file
     
     # 1. Define and validate supported statistics
     supported_stats = [
-        'mean', 'std', 'variance', 'min', 'max', 
+        'mean', 'std', 'variance', 'min', 'max', 'median',
         'delta_min_max', 'count_negative', 'count_positive'
     ]
     if stat_name not in supported_stats:
@@ -568,6 +568,7 @@ def plot_hand_stats_bars(hand_dir: str, file_type: str, stat_name: str, max_file
                     elif stat_name == 'variance': val = series.var()
                     elif stat_name == 'min': val = series.min()
                     elif stat_name == 'max': val = series.max()
+                    elif stat_name == 'median': val = series.median()
                     elif stat_name == 'delta_min_max': val = series.max() - series.min()
                     elif stat_name == 'count_negative': val = (series < 0).sum()
                     elif stat_name == 'count_positive': val = (series > 0).sum()
@@ -769,8 +770,9 @@ def main():
     
     for hand in ['Left', 'Right']:
         for file_type in ['accel', 'gyro']:
-            for axis in ['x', 'y', 'z']:
-                plot_hand_axis_raw(hand_dir=hand, axis=axis, file_type=file_type, max_files=5, save_path=f"Figures/{hand.lower()}_{file_type}_{axis}_axis.png")
+            for stat in ['mean', 'std', 'variance', 'min', 'max', 'median', 'delta_min_max', 'count_negative', 'count_positive']:
+                save_path = f"Figures/Statistics/{hand}_{file_type}_{stat}.png"
+                plot_hand_stats_bars(hand_dir=hand, file_type=file_type, stat_name=stat, max_files=5, save_path=save_path)
                 
 
 if __name__ == "__main__":
