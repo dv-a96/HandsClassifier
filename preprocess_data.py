@@ -51,15 +51,29 @@ def load_data(root_dir) -> pd.DataFrame:
         return pd.DataFrame()
 
 
+def normelized_data(df: pd.DataFrame) -> pd.DataFrame:
+    "Normalize the data using z-score normalization"
+    for col in ['accel_x', 'accel_y', 'accel_z', 'gyro_x', 'gyro_y', 'gyro_z']:
+        mean_val = df[col].mean()
+        std_val = df[col].std()
+        if std_val > 0:
+            df[col] = (df[col] - mean_val) / std_val
+    return df
+
+
 def preprocess_data(df: pd.DataFrame) -> pd.DataFrame:
     "Preprocess the data by normalizing"
-    pass
-
+    normelized_df = normelized_data(df)
+    return normelized_df
 def main():
     raw_data = load_data('./')
     print(raw_data.head(5))
     print(raw_data.tail(5))
     print(raw_data.shape)
+    normelized_data = preprocess_data(raw_data)
+    print(normelized_data.head(5))
+    print(normelized_data.tail(5))
+    print(normelized_data.shape)
 
 if __name__ == "__main__":
     main()
