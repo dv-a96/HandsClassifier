@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import glob
 import os
 import matplotlib.pyplot as plt
@@ -72,8 +73,42 @@ def plot_sampling_consistency(stats_list):
     plt.tight_layout()
     plt.show()
 
-    # 1. עיבוד והוספת הטור
-stats = add_timestamp_diff_column('./', 'accel')
+def resample_and_interpolate_file(df, target_interval_ns=2_000_000):
+    """
+    מבצעת יישור (Alignment) של הנתונים לרשת זמן קבועה וביצוע אינטרפולציה.
+    """
+    # 1. הבטחת טיפוס נתונים מספרי וניקוי כפילויות זמן
+    df = df.copy()
+    df['timestamp'] = pd.to_numeric(df['timestamp'], errors='coerce')
+    df = df.dropna(subset=['timestamp'])
+    
+    # אם יש שתי דגימות על אותה ננו-שנייה, ניקח את הממוצע שלהן
+    df = df.groupby('timestamp').mean().reset_index()
+    
+    # 2. קביעת האינדקס כזמן
+    df = df.set_index('timestamp')
+    
+    # 3. יצירת ציר הזמן ה"מושלם"
+    # מתחילים מהדגימה הראשונה וקופצים ב-2ms עד האחרונה
+    start_time = df.index.min()
+    end_time = df.index.max()
+    perfect_grid = np.arange(start_time, end_time, target_interval_ns)
+    
+    # 4. ביצוע ה-Resampling:
+    # אנחנו משלבים את האינדקס הקיים עם האינדקס החדש כדי לא לאבד מידע בזמן החישוב
+    combined_index = np.unique(np.concatenate([df.index, perfect_grid]))
+    df_aligned = df.reindex(combined_index)
+    
+    # 5. אינטרפולציה לינארית למילוי כל החורים (גם הברחנים הגבוהים וגם הנמוכים)
+    df_interpolated = df_aligned.interpolate(method='linear')
+    
+    # 6. חיתוך רק של הנקודות שיושבות בדיוק על הרשת שלנו
+    df_final = df_interpolated.loc[perfect_grid]
+    
+    return df_final.reset_index()
 
-# 2. הצגת הגרף
-plot_sampling_consistency(stats)
+
+
+raw_df = _load_sensor_csv('Left/VID_20260304_163829accel.csv')
+inter_df = resample_and_interpolate_file(raw_df, target_interval_ns=2_000_000)
+print("Raw Data:")
