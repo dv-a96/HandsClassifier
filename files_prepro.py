@@ -18,7 +18,11 @@ def add_timestamp_diff_column(base_path: str, file_type: str):
         files = sorted(glob.glob(os.path.join(hand_dir, pattern), recursive=True))
         
         for fpath in files:
-            df = _load_sensor_csv(fpath)
+            if "resampled" in fpath.lower():
+                header = 0  # קבצי Resampled כבר כוללים כותרת
+            else:
+                header = None
+            df = _load_sensor_csv(fpath, header=header)
             
             # חישוב ההפרשים (בננו-שניות, או ביחידות של הטור המקורי)
             # אם timestamp הוא זמן מוחלט - זה ייתן את ה-Sampling Interval
@@ -40,7 +44,7 @@ def add_timestamp_diff_column(base_path: str, file_type: str):
     return processed_stats
 
 
-def plot_sampling_consistency(stats_list):
+def plot_sampling_consistency(stats_list: list, save_path: str=None):
     """
     מציגה את טווח ההפרשים לכל קובץ.
     """
@@ -71,7 +75,10 @@ def plot_sampling_consistency(stats_list):
     plt.grid(axis='y', linestyle='--', alpha=0.7)
     
     plt.tight_layout()
-    plt.show()
+    if save_path is not None:
+        plt.savefig(save_path)
+    else:
+        plt.show()
 
 def resample_and_interpolate_file(df, target_interval_ns=2_000_000):
     """
@@ -108,7 +115,16 @@ def resample_and_interpolate_file(df, target_interval_ns=2_000_000):
     return df_final.reset_index()
 
 
+# for hand in ['Left', 'Right']:
+#     for file_type in ['accel', 'gyro']:
+#         pattern = f"**/*{file_type}.csv"
+#         files = sorted(glob.glob(os.path.join(f'{hand}', pattern), recursive=True))
+#         for file in files:
+#             file_name = file.split('/')[-1]
+#             raw_df = _load_sensor_csv(file)
+#             inter_df = resample_and_interpolate_file(raw_df, target_interval_ns=2_000_000)
+#             inter_df.to_csv(f'Resampled/{hand}/res_{file_name}', index=False)
 
-raw_df = _load_sensor_csv('Left/VID_20260304_163829accel.csv')
-inter_df = resample_and_interpolate_file(raw_df, target_interval_ns=2_000_000)
-print("Raw Data:")
+
+plot_sampling_consistency(add_timestamp_diff_column('.', 'accel'), save_path='Figures/sampling_consistency_raw_accel.png')
+plot_sampling_consistency(add_timestamp_diff_column('Resampled', 'accel'), save_path='Figures/sampling_consistency_resampled_accel.png')

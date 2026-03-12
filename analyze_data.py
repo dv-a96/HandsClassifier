@@ -231,23 +231,23 @@ def plot_left_vs_right_comparison(left_data, right_data):
     plt.close()
 
 
-def _load_sensor_csv(csv_path: str) -> pd.DataFrame:
+def _load_sensor_csv(csv_path: str, header: bool = None) -> pd.DataFrame:
     """Helper to read a sensor CSV and return a dataframe with proper columns and converted time.
 
     The CSV is expected to contain three axes and a timestamp column representing
     inter-sample deltas (nanoseconds).
     """
-    df = pd.read_csv(csv_path, header=None)
+    df = pd.read_csv(csv_path, header=header)
     if df.empty or df.shape[1] < 4:
         raise ValueError(f"CSV file {csv_path} does not have enough columns.")
 
     # Determine column names based on filename
-    if "accel" in csv_path.lower():
+    if "accel" in csv_path.lower() and  header is None:
         col_names = ["accel_x", "accel_y", "accel_z", "timestamp"]
-    elif "gyro" in csv_path.lower():
+    elif "gyro" in csv_path.lower() and header is None:
         col_names = ["gyro_x", "gyro_y", "gyro_z", "timestamp"]
-    else:
-        raise ValueError(f"Unable to determine file type from {csv_path}. Expected 'accel' or 'gyro' in filename.")
+    elif header is not None:
+        col_names = df.columns.tolist()
 
     df.columns = col_names[:len(df.columns)]
     if "timestamp" not in df.columns:
