@@ -22,6 +22,14 @@ For every recorded session, the following files were generated:
 
 Each CSV file consists of four columns: three representing the spatial axes ($X, Y, Z$) and one for the high-precision timestamps used for synchronization.
 
+
+## Files Cleaning
+### Sampling inconsistency 
+
+### Resampling and Interpolation 
+
+### Smoothing
+many under data analysis 
 ## Data Analysis
 The `analyze_data.py` script provides comprehensive statistical analysis of the IMU sensor data collected during the study.
 
