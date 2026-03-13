@@ -386,6 +386,56 @@ def plot_side_by_side_raw(left_dir: str, right_dir: str, file_type: str, max_fil
         print(f"Plot saved as '{save_path}'")
     return fig
 
+
+def _compute_smoothing(df: pd.DataFrame, file_type: str, ma_window: int = 100, sg_window: int = 201) -> pd.DataFrame:
+    """Add smoothing columns (moving average + Savitzky-Golay) to a sensor dataframe.
+
+    The dataframe is expected to contain a "timestamp" column (nanosecond deltas) and
+    axis columns like "accel_x" / "gyro_x".
+    """
+
+    prefix = "accel" if file_type == "accel" else "gyro"
+    for axis in ["x", "y", "z"]:
+        col = f"{prefix}_{axis}"
+        if col not in df.columns:
+            continue
+
+        df[f"{col}_ma"] = df[col].rolling(window=ma_window, center=True).mean()
+
+        # Savitzky-Golay smoothing (window must be odd)
+        sg_window_adj = min(sg_window, len(df) // 2 * 2 - 1)
+        if sg_window_adj < 3:
+            df[f"{col}_sg"] = df[col]
+        else:
+            df[f"{col}_sg"] = savgol_filter(df[col].values, sg_window_adj, polyorder=2)
+
+    return df
+
+
+def smooth_and_save_hand_data(hand_dir: str, save_dir: str, file_type: str, max_files: int = 5) -> None:
+    """Process files in hand_dir, compute smoothing for all axes, and save each smoothed DF as a separate CSV in save_dir.
+
+    For each file, saves a CSV named 'basename_smoothed.csv' containing raw data, moving average, and Savitzky-Golay for all axes.
+    """
+    pattern = f"**/*{file_type}.csv"
+    files = sorted(glob.glob(os.path.join(hand_dir, pattern), recursive=True))[:max_files]
+    if not files:
+        print(f"No {file_type} files found in {hand_dir}")
+        return
+
+    os.makedirs(save_dir, exist_ok=True)
+
+    for fpath in files:
+        df = _load_sensor_csv(fpath, header=0)  # Assuming smoothed files have headers
+        df = df.copy()
+        df = _compute_smoothing(df, file_type=file_type)
+        
+        basename = f"smoothed_{os.path.basename(fpath)}"
+        out_path = os.path.join(save_dir, basename)
+        df.to_csv(out_path, index=False)
+        print(f"Smoothed data saved to: {out_path}")
+
+
 def plot_hand_axis_raw(hand_dir:str, axis: str, file_type: str, max_files: int = 5, save_path: str = None) -> plt.Figure:
     """Plot raw data for a specific hand and axis across multiple files. Plot with dual smoothing layers:
     1. Raw Data: Faint background to show noise levels.
@@ -437,7 +487,7 @@ def plot_hand_axis_raw(hand_dir:str, axis: str, file_type: str, max_files: int =
         ax = axes[i, 0]
         try:
             # Assuming _load_sensor_csv is defined elsewhere in your script
-            df = _load_sensor_csv(fpath)
+            df = _load_sensor_csv(fpath, header=0)  # Assuming smoothed files have headers
             col = f"{file_type}_{axis}"
             
             if col not in df.columns:
@@ -509,7 +559,7 @@ def plot_hand_axis_raw(hand_dir:str, axis: str, file_type: str, max_files: int =
     return fig
 
 
-def plot_hand_stats_bars(hand_dir: str, file_type: str, stat_name: str, max_files: int = 5, save_path: str = None) -> plt.Figure:
+def plot_hand_stats_bars(hand_dir: str, file_type: str, stat_name: str, max_files: int = 5, smooth=False, save_path: str = None) -> plt.Figure:
     """
     Generate bar plots for a specific statistical metric across multiple files.
     Each file gets its own subplot showing X, Y, and Z axis values for the chosen statistic.
@@ -546,14 +596,15 @@ def plot_hand_stats_bars(hand_dir: str, file_type: str, stat_name: str, max_file
     fig, axes = plt.subplots(len(files), 1, figsize=(10, len(files) * 3.5), squeeze=False)
     
     # Define axis mapping and corresponding colors
-    axes_names = ['x', 'y', 'z']
+    axes_names = ['x', 'y', 'z'] if smooth==False else ['x_ma', 'y_ma', 'z_ma']  # Use smoothed column names if needed
     axis_colors = ['red', 'green', 'blue'] # X=Red, Y=Green, Z=Blue
 
     # 4. Process each file
     for i, fpath in enumerate(files):
         try:
             # Assuming _load_sensor_csv is defined in your environment
-            df = _load_sensor_csv(fpath)
+            header=None if smooth==False else 0  # If smooth=False, we expect no header. If smooth=True, we expect smoothed files with headers.
+            df = _load_sensor_csv(fpath, header=header)
             ax = axes[i, 0]
             
             stat_values = []
@@ -610,83 +661,6 @@ def plot_hand_stats_bars(hand_dir: str, file_type: str, stat_name: str, max_file
         
     return fig
 
-
-def plot_axis_timeseries(left_dir: str, right_dir: str, axis: str, max_files: int = 5, save_path: str = None) -> plt.Figure:
-    """Plot timeseries for a specific axis from accel files in separate subplots.
-
-    Creates two subplots side by side: left subplot shows all left-hand files,
-    right subplot shows all right-hand files. All files on the same subplot share
-    the same timeline, each with a unique color.
-
-    Args:
-        left_dir: Directory containing left-hand accel CSV files.
-        right_dir: Directory containing right-hand accel CSV files.
-        axis: The axis to plot ('x', 'y', or 'z').
-        max_files: Maximum number of files to plot from each side.
-        save_path: Optional path to save the figure.
-    Returns:
-        matplotlib Figure object.
-    """
-    if axis not in ('x', 'y', 'z'):
-        raise ValueError("axis must be 'x', 'y', or 'z'")
-
-    pattern = "**/*accel.csv"
-    left_files = sorted(glob.glob(os.path.join(left_dir, pattern), recursive=True))[:max_files]
-    right_files = sorted(glob.glob(os.path.join(right_dir, pattern), recursive=True))[:max_files]
-
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-
-    # Colors for files
-    colors = ['red', 'orange', 'yellow', 'pink', 'purple', 'blue', 'green', 'cyan', 'magenta', 'brown']
-
-    # Plot left files
-    ax = axes[0]
-    for i, fpath in enumerate(left_files):
-        try:
-            df = _load_sensor_csv(fpath)
-            col = f"accel_{axis}"
-            if col in df.columns:
-                # Convert timestamp deltas to cumulative seconds
-                df["timestamp"] = df["timestamp"].cumsum() / 1e9
-                
-                label = os.path.basename(fpath)
-                ax.plot(df['timestamp'], df[col], color=colors[i % len(colors)],
-                        linewidth=1, label=label)
-        except Exception as e:
-            print(f"Error loading {fpath}: {e}")
-    ax.set_xlabel('Time (seconds)')
-    ax.set_ylabel('Acceleration')
-    ax.set_title(f'Left Hand - {axis.upper()}-axis')
-    ax.legend()
-    ax.grid(True, alpha=0.3)
-
-    # Plot right files
-    ax = axes[1]
-    for i, fpath in enumerate(right_files):
-        try:
-            df = _load_sensor_csv(fpath)
-            col = f"accel_{axis}"
-            if col in df.columns:
-                # Convert timestamp deltas to cumulative seconds
-                df["timestamp"] = df["timestamp"].cumsum() / 1e9
-                
-                label = os.path.basename(fpath)
-                ax.plot(df['timestamp'], df[col], color=colors[i % len(colors)],
-                        linewidth=1, label=label)
-        except Exception as e:
-            print(f"Error loading {fpath}: {e}")
-    ax.set_xlabel('Time (seconds)')
-    ax.set_ylabel('Acceleration')
-    ax.set_title(f'Right Hand - {axis.upper()}-axis')
-    ax.legend()
-    ax.grid(True, alpha=0.3)
-
-    fig.suptitle(f'Acceleration {axis.upper()}-axis Timeseries Comparison', fontsize=14)
-    fig.tight_layout()
-    if save_path:
-        fig.savefig(save_path, dpi=150, bbox_inches='tight')
-        print(f"Plot saved as '{save_path}'")
-    return fig
 
 
 
@@ -768,11 +742,17 @@ def main():
     #                         freq_data["labels"].append(os.path.basename(csv_path))
     
     
+    # for hand in ['Smoothed/Left', 'Smoothed/Right']:
+    #     for file_type in ['accel', 'gyro']:
+    #         for stat in ['mean', 'std', 'variance', 'min', 'max', 'median', 'delta_min_max', 'count_negative', 'count_positive']:
+    #             hand_dir = hand.split('/')[-1]  # Extract 'Left' or 'Right' from the path
+    #             save_path = f"Figures/Smooth/Statistics/{hand_dir}_{file_type}_{stat}.png"
+    #             plot_hand_stats_bars(hand_dir=hand, file_type=file_type, stat_name=stat, max_files=5, smooth=True, save_path=save_path)
+
     for hand in ['Left', 'Right']:
         for file_type in ['accel', 'gyro']:
-            for stat in ['mean', 'std', 'variance', 'min', 'max', 'median', 'delta_min_max', 'count_negative', 'count_positive']:
-                save_path = f"Figures/Statistics/{hand}_{file_type}_{stat}.png"
-                plot_hand_stats_bars(hand_dir=hand, file_type=file_type, stat_name=stat, max_files=5, save_path=save_path)
+            smooth_and_save_hand_data(hand_dir=f'Resampled/{hand}', save_dir=f'Smoothed/{hand}', file_type=file_type, max_files=5)
+    # plot_hand_axis_raw(hand_dir='Smoothed/Left', axis='x', file_type='accel', max_files=5, save_path='temp_left_accel_x.png')
                 
 
 if __name__ == "__main__":
