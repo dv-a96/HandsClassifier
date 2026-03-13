@@ -29,7 +29,14 @@ Each CSV file consists of four columns: three representing the spatial axes ($X,
 ### Resampling and Interpolation 
 
 ### Smoothing
-many under data analysis 
+many under data analysis
+
+### Remove gravity acceleration
+
+In accelerometer data, the measured acceleration includes both the device's motion and the constant gravitational acceleration. Since the videos were recorded in selfie mode (device held vertically), the gravity component primarily affects the Y-axis, appearing as a constant offset around 9.8 m/s² (depending on orientation).
+
+To isolate the actual motion-induced acceleration, we applied a low-frequency Butterworth high-pass filter to remove the gravity component while preserving the dynamic motion signals. For the gyroscope data, which measures rotational velocity, no such correction was needed as gravity does not affect angular measurements.
+
 ## Data Analysis
 The `analyze_data.py` script provides comprehensive statistical analysis of the IMU sensor data collected during the study.
 
