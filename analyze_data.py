@@ -751,7 +751,7 @@ def main():
 
     for hand in ['Left', 'Right']:
         for file_type in ['accel', 'gyro']:
-            smooth_and_save_hand_data(hand_dir=f'Resampled/{hand}', save_dir=f'Smoothed/{hand}', file_type=file_type, max_files=5)
+            smooth_and_save_hand_data(hand_dir=f'Clean/{hand}', save_dir=f'Smoothed/{hand}', file_type=file_type, max_files=5)
     # plot_hand_axis_raw(hand_dir='Smoothed/Left', axis='x', file_type='accel', max_files=5, save_path='temp_left_accel_x.png')
                 
 
