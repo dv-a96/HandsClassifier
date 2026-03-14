@@ -662,6 +662,125 @@ def plot_hand_stats_bars(hand_dir: str, file_type: str, stat_name: str, max_file
     return fig
 
 
+def create_stats_dfs(root_dir: str, save_dir: str) -> None:
+    """Create statistics DataFrames for Left and Right hands from smoothed data.
+    
+    Each DF contains: filename, axis, mean, std, variance, min, max, median, delta_min_max, count_negative, count_positive
+    Saves as left_stats.csv and right_stats.csv in save_dir.
+    """
+    stats_list = ['mean', 'std', 'variance', 'min', 'max', 'median', 'delta_min_max', 'count_negative', 'count_positive']
+    
+    for hand in ['Left', 'Right']:
+        hand_dir = f'{root_dir}/{hand}'
+        if not os.path.isdir(hand_dir):
+            print(f"Directory {hand_dir} not found")
+            continue
+        for pattern in ["**/*accel.csv", "**/*gyro.csv"]:
+            data = []
+            files = sorted(glob.glob(os.path.join(hand_dir, pattern), recursive=True))
+            if root_dir == 'Smoothed':
+                axes = ['x_sg', 'y_sg', 'z_sg']
+            else:
+                axes = ['x', 'y', 'z']
+            for fpath in files:
+                try:
+                    df = pd.read_csv(fpath)
+                    filename = os.path.basename(fpath)
+                    file_type = 'accel' if 'accel' in filename else 'gyro'
+                    
+                    for axis in axes:
+                        col = f"{file_type}_{axis}"
+                        if col in df.columns:
+                            series = df[col]
+                            row = {'filename': filename, 'axis': axis}
+                            for stat in stats_list:
+                                if stat == 'mean':
+                                    row[stat] = series.mean()
+                                elif stat == 'std':
+                                    row[stat] = series.std()
+                                elif stat == 'variance':
+                                    row[stat] = series.var()
+                                elif stat == 'min':
+                                    row[stat] = series.min()
+                                elif stat == 'max':
+                                    row[stat] = series.max()
+                                elif stat == 'median':
+                                    row[stat] = series.median()
+                                elif stat == 'delta_min_max':
+                                    row[stat] = series.max() - series.min()
+                                elif stat == 'count_negative':
+                                    row[stat] = (series < 0).sum()
+                                elif stat == 'count_positive':
+                                    row[stat] = (series > 0).sum()
+                            data.append(row)
+                except Exception as e:
+                    print(f"Error processing {fpath}: {e}")
+            
+            if data:
+                stats_df = pd.DataFrame(data)
+                out_path = os.path.join(save_dir, f"{hand.lower()}_{file_type}_stats.csv")
+                stats_df.to_csv(out_path, index=False)
+                print(f"Stats DF saved to: {out_path}")
+
+import pandas as pd
+import os
+import glob
+
+def create_global_summary(stats_dir: str, out_path: str = None) -> pd.DataFrame:
+    """
+    Reads all stat CSVs, aggregates them by Hand, Sensor, and Axis,
+    and calculates the Mean and Std for each metric.
+    """
+    all_data = []
+    
+    # 1. חיפוש כל קבצי הסטטיסטיקה שיצרנו
+    file_pattern = os.path.join(stats_dir, "*_stats.csv")
+    files = glob.glob(file_pattern)
+    
+    for fpath in files:
+        df = pd.read_csv(fpath)
+        filename = os.path.basename(fpath)
+        
+        # חילוץ היד וסוג החיישן מתוך שם הקובץ (למשל: left_accel_stats.csv)
+        parts = filename.split('_')
+        hand = parts[0].capitalize()  # Left / Right
+        sensor = parts[1].capitalize() # Accel / Gyro
+        
+        # הוספת העמודות המזהות ל-DF הנוכחי
+        df['hand'] = hand
+        df['sensor'] = sensor
+        all_data.append(df)
+    
+    if not all_data:
+        print("No stats files found to summarize.")
+        return None
+
+    # 2. איחוד כל הקבצים ל-DataFrame אחד גדול
+    master_df = pd.concat(all_data, ignore_index=True)
+    
+    # 3. בחירת העמודות שאתה רוצה לסכם (כל המדדים הסטטיסטיים)
+    stats_to_aggregate = [
+        'mean', 'std', 'variance', 'min', 'max', 
+        'median', 'delta_min_max', 'count_negative', 'count_positive'
+    ]
+    
+    # 4. ביצוע ה-Groupby וחישוב ממוצע וסטיית תקן לכל מדד
+    # אנחנו מקבצים לפי יד, חיישן וציר
+    summary = master_df.groupby(['hand', 'sensor', 'axis'])[stats_to_aggregate].agg(['mean', 'std'])
+    
+    # 5. שיפור שמות העמודות (משטיחים את ה-MultiIndex)
+    # זה יהפוך שמות כמו ('mean', 'mean') ל- 'mean_avg' ו- ('mean', 'std') ל- 'mean_std_dev'
+    summary.columns = [f"{col[0]}_{'avg' if col[1]=='mean' else 'std_dev'}" for col in summary.columns]
+    
+    # איפוס האינדקס כדי שהיד, החיישן והציר יהיו עמודות רגילות
+    summary = summary.reset_index()
+    
+    # 6. שמירה במידה וניתן נתיב
+    if out_path:
+        summary.to_csv(out_path, index=False)
+        print(f"Global summary saved to: {out_path}")
+        
+    return summary
 
 
 
@@ -683,6 +802,8 @@ def walk_and_analyze(root_dirs):
             for pat in patterns:
                 for filepath in glob.glob(os.path.join(subpath, pat)):
                     process_file(filepath, pat)
+
+
 
 
 def main():
@@ -749,10 +870,8 @@ def main():
     #             save_path = f"Figures/Smooth/Statistics/{hand_dir}_{file_type}_{stat}.png"
     #             plot_hand_stats_bars(hand_dir=hand, file_type=file_type, stat_name=stat, max_files=5, smooth=True, save_path=save_path)
 
-    for hand in ['Left', 'Right']:
-        for file_type in ['accel', 'gyro']:
-            smooth_and_save_hand_data(hand_dir=f'Clean/{hand}', save_dir=f'Smoothed/{hand}', file_type=file_type, max_files=5)
-    # plot_hand_axis_raw(hand_dir='Smoothed/Left', axis='x', file_type='accel', max_files=5, save_path='temp_left_accel_x.png')
+    create_global_summary(stats_dir="Smoothed/Stats", out_path="Smoothed/global_summary.csv")
+
                 
 
 if __name__ == "__main__":
