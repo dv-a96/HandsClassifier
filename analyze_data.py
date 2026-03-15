@@ -1,5 +1,6 @@
 import os
 import glob
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
@@ -722,65 +723,179 @@ def create_stats_dfs(root_dir: str, save_dir: str) -> None:
                 stats_df.to_csv(out_path, index=False)
                 print(f"Stats DF saved to: {out_path}")
 
-import pandas as pd
-import os
-import glob
-
 def create_global_summary(stats_dir: str, out_path: str = None) -> pd.DataFrame:
-    """
-    Reads all stat CSVs, aggregates them by Hand, Sensor, and Axis,
-    and calculates the Mean and Std for each metric.
-    """
     all_data = []
-    
-    # 1. חיפוש כל קבצי הסטטיסטיקה שיצרנו
-    file_pattern = os.path.join(stats_dir, "*_stats.csv")
-    files = glob.glob(file_pattern)
+    files = glob.glob(os.path.join(stats_dir, "*_stats.csv"))
     
     for fpath in files:
         df = pd.read_csv(fpath)
         filename = os.path.basename(fpath)
-        
-        # חילוץ היד וסוג החיישן מתוך שם הקובץ (למשל: left_accel_stats.csv)
         parts = filename.split('_')
-        hand = parts[0].capitalize()  # Left / Right
-        sensor = parts[1].capitalize() # Accel / Gyro
-        
-        # הוספת העמודות המזהות ל-DF הנוכחי
-        df['hand'] = hand
-        df['sensor'] = sensor
+        df['hand'] = parts[0].capitalize()
+        df['sensor'] = parts[1].capitalize()
         all_data.append(df)
     
     if not all_data:
-        print("No stats files found to summarize.")
         return None
 
-    # 2. איחוד כל הקבצים ל-DataFrame אחד גדול
     master_df = pd.concat(all_data, ignore_index=True)
+
+    # 1. הגדרת הקבוצות והטורים לחישוב
+    group_cols = ['hand', 'sensor', 'axis']
+    # רשימת הטורים לחישוב (כל מה שהוא מספר ולא חלק מהקבוצות)
+    stat_cols = [c for c in master_df.columns if c not in group_cols + ['filename']]
+
+    # 2. שימוש במילון (Dictionary) בתוך ה-agg
+    # זו הדרך הכי בטוחה ב-Pandas למנוע את ה-IndexError עם העמודה 'axis'
+    agg_dict = {col: ['mean', 'std'] for col in stat_cols}
     
-    # 3. בחירת העמודות שאתה רוצה לסכם (כל המדדים הסטטיסטיים)
-    stats_to_aggregate = [
-        'mean', 'std', 'variance', 'min', 'max', 
-        'median', 'delta_min_max', 'count_negative', 'count_positive'
-    ]
-    
-    # 4. ביצוע ה-Groupby וחישוב ממוצע וסטיית תקן לכל מדד
-    # אנחנו מקבצים לפי יד, חיישן וציר
-    summary = master_df.groupby(['hand', 'sensor', 'axis'])[stats_to_aggregate].agg(['mean', 'std'])
-    
-    # 5. שיפור שמות העמודות (משטיחים את ה-MultiIndex)
-    # זה יהפוך שמות כמו ('mean', 'mean') ל- 'mean_avg' ו- ('mean', 'std') ל- 'mean_std_dev'
+    # 3. ביצוע ה-Groupby בלי לבחור טורים מראש בסוגריים מרובעים
+    summary = master_df.groupby(group_cols).agg(agg_dict)
+
+    # 4. שיטוח שמות העמודות
     summary.columns = [f"{col[0]}_{'avg' if col[1]=='mean' else 'std_dev'}" for col in summary.columns]
-    
-    # איפוס האינדקס כדי שהיד, החיישן והציר יהיו עמודות רגילות
     summary = summary.reset_index()
-    
-    # 6. שמירה במידה וניתן נתיב
+
     if out_path:
         summary.to_csv(out_path, index=False)
         print(f"Global summary saved to: {out_path}")
         
     return summary
+
+
+def plot_hand_summery_comparison(summary_df: pd.DataFrame, sensor_type: str, metric: str, save_path: str=None):
+    """
+    Creates a bar plot comparing Left vs Right hand for a specific sensor and metric.
+    Uses error bars to represent the standard deviation of the metric.
+    """
+    # 1. סינון הנתונים לחיישן המבוקש
+    sensor_df = summary_df[summary_df['sensor'] == sensor_type.capitalize()]
+    
+    if sensor_df.empty:
+        print(f"No data found for sensor: {sensor_type}")
+        return
+
+    axes_names = sensor_df['axis'].unique()
+    hands = ['Left', 'Right']
+    
+    # הגדרת שמות העמודות הרלוונטיות
+    avg_col = f"{metric}_avg"
+    std_col = f"{metric}_std_dev"
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    x = np.arange(len(axes_names))  # מיקומי הצירים (x, y, z)
+    width = 0.35  # רוחב המוטות
+    
+    # 2. ציור המוטות לכל יד
+    for i, hand in enumerate(hands):
+        hand_data = sensor_df[sensor_df['hand'] == hand]
+        # וודא שהנתונים ממוינים לפי סדר הצירים
+        hand_data = hand_data.set_index('axis').loc[axes_names]
+        
+        means = hand_data[avg_col]
+        stds = hand_data[std_col]
+        
+        ax.bar(x + (i * width) - width/2, means, width, 
+               yerr=stds, label=hand, capsize=5, alpha=0.8)
+
+    # 3. עיצוב הגרף
+    ax.set_xlabel('Axis')
+    ax.set_ylabel(f'Value ({metric})')
+    ax.set_title(f'Comparison of {metric.capitalize()} by Hand ({sensor_type})')
+    ax.set_xticks(x)
+    ax.set_xticklabels(axes_names)
+    ax.legend()
+    ax.grid(axis='y', linestyle='--', alpha=0.7)
+
+    plt.tight_layout()
+    if save_path:
+        plt.savefig(save_path, dpi=150, bbox_inches='tight')
+    else:
+        plt.show()
+
+
+
+
+def plot_comprehensive_hand_comparison(summary_df, sensor_type='Accel', save_path=None):
+    """
+    Generates a grid of bar plots comparing Left vs Right hand performance 
+    across all available statistical metrics.
+    
+    Parameters:
+    - summary_df (pd.DataFrame): The aggregated global summary dataframe.
+    - sensor_type (str): 'Accel' or 'Gyro'.
+    - save_path (str): Full file path to save the image. If None, the plot is displayed.
+    """
+    
+    # 1. Filter data by the specific sensor type
+    sensor_df = summary_df[summary_df['sensor'] == sensor_type.capitalize()]
+    if sensor_df.empty:
+        print(f"No data found for {sensor_type}")
+        return
+
+    # 2. Automatically identify all statistical metrics based on the '_avg' suffix
+    metrics = [col.replace('_avg', '') for col in summary_df.columns if col.endswith('_avg')]
+    
+    # 3. Calculate grid dimensions (3 columns per row)
+    num_metrics = len(metrics)
+    n_cols = 3
+    n_rows = (num_metrics + n_cols - 1) // n_cols
+    
+    # Create the figure and subplots
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(18, 5 * n_rows))
+    axes = axes.flatten()
+    
+    axes_names = sorted(sensor_df['axis'].unique())
+    hands = ['Left', 'Right']
+    colors = ['#1f77b4', '#ff7f0e'] # Standard Blue and Orange
+    
+    for i, metric in enumerate(metrics):
+        ax = axes[i]
+        avg_col = f"{metric}_avg"
+        std_col = f"{metric}_std_dev"
+        
+        x = np.arange(len(axes_names))
+        width = 0.35
+        
+        for j, hand in enumerate(hands):
+            # Isolate data for each hand and ensure consistent axis ordering
+            hand_data = sensor_df[sensor_df['hand'] == hand].set_index('axis').loc[axes_names]
+            
+            # Plot bars with error bars representing the standard deviation
+            ax.bar(x + (j * width) - width/2, hand_data[avg_col], width,
+                   yerr=hand_data[std_col], label=hand if i == 0 else "", 
+                   capsize=4, color=colors[j], alpha=0.8)
+        
+        # Subplot formatting
+        ax.set_title(f'{metric.replace("_", " ").capitalize()}', fontsize=14, fontweight='bold')
+        ax.set_xticks(x)
+        ax.set_xticklabels(axes_names)
+        ax.grid(axis='y', linestyle='--', alpha=0.5)
+        if i % n_cols == 0:
+            ax.set_ylabel('Aggregated Value')
+
+    # Add a global legend for the entire figure
+    fig.legend(['Left Hand', 'Right Hand'], loc='upper center', bbox_to_anchor=(0.5, 1.02), 
+               ncol=2, fontsize=16, frameon=True, shadow=True)
+
+    # Hide any unused axis slots in the grid
+    for j in range(i + 1, len(axes)):
+        axes[j].axis('off')
+
+    plt.suptitle(f'Comprehensive Feature Comparison: Left vs Right ({sensor_type})', 
+                 fontsize=20, y=1.05, fontweight='black')
+    
+    plt.tight_layout()
+
+    # 4. Save or Show logic
+    if save_path:
+        # Create directory if it doesn't exist
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"Comprehensive plot saved successfully to: {save_path}")
+    else:
+        plt.show()
 
 
 
@@ -870,7 +985,8 @@ def main():
     #             save_path = f"Figures/Smooth/Statistics/{hand_dir}_{file_type}_{stat}.png"
     #             plot_hand_stats_bars(hand_dir=hand, file_type=file_type, stat_name=stat, max_files=5, smooth=True, save_path=save_path)
 
-    create_global_summary(stats_dir="Smoothed/Stats", out_path="Smoothed/global_summary.csv")
+    df = pd.read_csv('Smoothed/global_summary.csv')
+    plot_comprehensive_hand_comparison(df, 'gyro', 'Smoothed/sub_stas_summery_gyto.png')
 
                 
 
