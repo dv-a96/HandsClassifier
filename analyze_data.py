@@ -3,6 +3,7 @@ import glob
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 from matplotlib.lines import Line2D
 from scipy.signal import savgol_filter
 import cv2
@@ -710,9 +711,9 @@ def create_stats_dfs(root_dir: str, save_dir: str) -> None:
                                 elif stat == 'delta_min_max':
                                     row[stat] = series.max() - series.min()
                                 elif stat == 'count_negative':
-                                    row[stat] = (series < 0).sum()
+                                    row[stat] = (series < 0).sum()/len(series)  # Count negative per second
                                 elif stat == 'count_positive':
-                                    row[stat] = (series > 0).sum()
+                                    row[stat] = (series > 0).sum()/len(series)  # Count positve per second
                             data.append(row)
                 except Exception as e:
                     print(f"Error processing {fpath}: {e}")
@@ -722,6 +723,72 @@ def create_stats_dfs(root_dir: str, save_dir: str) -> None:
                 out_path = os.path.join(save_dir, f"{hand.lower()}_{file_type}_stats.csv")
                 stats_df.to_csv(out_path, index=False)
                 print(f"Stats DF saved to: {out_path}")
+
+
+def plot_stats_outliers(stats_csv_path, axis_name='z_sg', save_path=None):
+    df = pd.read_csv(stats_csv_path)
+    df_axis = df[df['axis'] == axis_name].copy()
+    
+    if df_axis.empty:
+        print(f"No data for axis {axis_name}")
+        return
+
+    metrics = ['mean', 'std', 'variance', 'min', 'max', 'median', 'delta_min_max', 'count_negative', 'count_positive']
+    cols = 3
+    rows = (len(metrics) + cols - 1) // cols
+    
+    fig, axes = plt.subplots(rows, cols, figsize=(18, 5 * rows))
+    axes = axes.flatten()
+
+    for i, metric in enumerate(metrics):
+        ax = axes[i]
+        series = df_axis[metric].dropna()
+        if series.empty:
+            ax.set_visible(False)
+            continue
+            
+        q1, q3 = series.quantile(0.25), series.quantile(0.75)
+        iqr = q3 - q1
+        lower_bound, upper_bound = q1 - 1.5 * iqr, q3 + 1.5 * iqr
+        
+        # תיקון tick_labels כדי למנוע את האזהרה
+        bp = ax.boxplot(series, patch_artist=True, tick_labels=[metric])
+        bp['boxes'][0].set(facecolor='lightgreen', alpha=0.5)
+        
+        outliers = df_axis[(df_axis[metric] < lower_bound) | (df_axis[metric] > upper_bound)]
+        for _, row in outliers.iterrows():
+            ax.annotate(row['filename'], xy=(1, row[metric]), xytext=(15, 0),
+                        textcoords='offset points', fontsize=7, color='darkred',
+                        arrowprops=dict(arrowstyle='->', color='red', alpha=0.2))
+        
+        ax.set_title(f'Metric: {metric}', fontweight='bold')
+        ax.grid(axis='y', linestyle='--', alpha=0.3)
+
+    # --- הוספת המקרא (Legend) ---
+    # יצירת אלמנטים גרפיים להסבר
+    legend_elements = [
+        mpatches.Patch(facecolor='lightgreen', alpha=0.5, edgecolor='black', label='IQR Range (25%-75%)'),
+        Line2D([0], [0], color='orange', lw=2, label='Median Value'),
+        Line2D([0], [0], marker='o', color='none', markerfacecolor='black', markeredgecolor='black', label='Outlier Point'),
+        Line2D([0], [0], color='red', marker='>', markersize=8, label='File Label (Outlier Name)', linestyle='none', alpha=0.6)
+    ]
+    
+    # מיקום המקרא בחלק העליון של האיור
+    fig.legend(handles=legend_elements, loc='upper left', bbox_to_anchor=(0.98, 0.98), 
+               ncol=1, fontsize=10, frameon=True, shadow=True, title="Legend")
+
+    fig.suptitle(f'Detailed Outlier Analysis | Axis: {axis_name} | File: {os.path.basename(stats_csv_path)}', 
+                 fontsize=16, fontweight='bold', y=1.02)
+    
+    plt.tight_layout()
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"Subplots saved to: {save_path}")
+    else:
+        plt.show()
+
+
+
 
 def create_global_summary(stats_dir: str, out_path: str = None) -> pd.DataFrame:
     all_data = []
@@ -921,74 +988,28 @@ def walk_and_analyze(root_dirs):
 
 
 
-def main():
-    # # default directories relative to this script
-    # base = os.path.dirname(os.path.abspath(__file__))
-    # dirs = [os.path.join(base, "Left"), os.path.join(base, "Right")]
+def main():    
     
-    # # Individual file analysis
-    # walk_and_analyze(dirs)
-    
-    # # Collect data for comparison
-    # left_data = collect_data_for_root(dirs[0])
-    # right_data = collect_data_for_root(dirs[1])
-    
-    # # Comparison analysis for each root directory
-    # print(f"\n\n{'#'*80}")
-    # print("COMPARISON TABLES FOR EACH ROOT DIRECTORY")
-    # print(f"{'#'*80}")
-    # for root_dir in dirs:
-    #     compare_statistics_in_root(root_dir)
-    
-    # # Plot comparison
-    # print(f"\n\n{'#'*80}")
-    # print("PLOTTING LEFT VS RIGHT COMPARISON")
-    # print(f"{'#'*80}")
-    # plot_left_vs_right_comparison(left_data, right_data)
-    
-    # # Calculate and plot sampling frequencies
-    # print(f"\n\n{'#'*80}")
-    # print("CALCULATING AND PLOTTING SAMPLING FREQUENCIES")
-    # print(f"{'#'*80}")
-    
-    # # Find video files
-    # video_files = {}
-    # for root in dirs:
-    #     for file in glob.glob(os.path.join(root, "**", "*.mp4"), recursive=True):
-    #         video_key = os.path.basename(file).replace('.mp4', '')
-    #         video_files[video_key] = file
-    
-    # # Calculate frequencies for each CSV
-    # freq_data = {"sensor": [], "video": [], "labels": []}
-    # for root in dirs:
-    #     for subdir in sorted(os.listdir(root)):
-    #         subpath = os.path.join(root, subdir)
-    #         if not os.path.isdir(subpath):
-    #             continue
-    #         for pat in ["*accel.csv", "*gyro.csv"]:
-    #             for csv_path in glob.glob(os.path.join(subpath, pat)):
-    #                 # Find corresponding video (remove accel/gyro and .csv)
-    #                 video_key = os.path.basename(csv_path).replace('.csv', '').replace('accel', '').replace('gyro', '').strip('_')
-    #                 video_path = video_files.get(video_key)
-    #                 if video_path:
-    #                     sensor_freq, video_fps = calculate_sampling_frequencies(csv_path, video_path)
-    #                     if sensor_freq is not None:
-    #                         freq_data["sensor"].append(sensor_freq)
-    #                         freq_data["video"].append(video_fps or 0)
-    #                         freq_data["labels"].append(os.path.basename(csv_path))
-    
-    
-    # for hand in ['Smoothed/Left', 'Smoothed/Right']:
+    # for hand in ['Left', 'Right']:
     #     for file_type in ['accel', 'gyro']:
     #         for stat in ['mean', 'std', 'variance', 'min', 'max', 'median', 'delta_min_max', 'count_negative', 'count_positive']:
-    #             hand_dir = hand.split('/')[-1]  # Extract 'Left' or 'Right' from the path
-    #             save_path = f"Figures/Smooth/Statistics/{hand_dir}_{file_type}_{stat}.png"
-    #             plot_hand_stats_bars(hand_dir=hand, file_type=file_type, stat_name=stat, max_files=5, smooth=True, save_path=save_path)
+    #             save_path = f"Figures/Smooth/Statistics/{hand}_{file_type}_{stat}.png"
+    #             plot_hand_stats_bars(hand_dir=f'Smoothed/{hand}', file_type=file_type, stat_name=stat, max_files=5, smooth=True, save_path=save_path)
 
-    df = pd.read_csv('Smoothed/global_summary.csv')
-    plot_comprehensive_hand_comparison(df, 'gyro', 'Smoothed/sub_stas_summery_gyto.png')
 
-                
+    
+    # create_stats_dfs('Smoothed', 'Smoothed/Stats')
+    # create_global_summary('Smoothed/Stats', 'Smoothed/global_summery.csv')
+
+
+    # df = pd.read_csv('Smoothed/global_summery.csv')
+    # plot_comprehensive_hand_comparison(df, 'gyro', 'Smoothed/gyro_stas_summery.png')
+    # plot_comprehensive_hand_comparison(df, 'accel', 'Smoothed/accel_stas_summery.png')
+
+    for hand in ['Left', 'Right']:
+        for file_type in ['accel', 'gyro']:
+            for axis in ['x', 'y', 'z']:
+                plot_stats_outliers(f'Smoothed/Stats/{hand.lower()}_{file_type}_stats.csv', f'{axis}_sg', f'Smoothed/{hand.lower()}_{file_type}_{axis}_sg_outliers.png')
 
 if __name__ == "__main__":
     main()
