@@ -219,38 +219,6 @@ def apply_butterworth_highpass(data, cutoff_hz, fs, order=4):
     return filtered_data
 
 
-# for hand in ['Left', 'Right']:
-#     for file_type in ['accel', 'gyro']:
-#         pattern = f"**/*{file_type}.csv"
-#         files = sorted(glob.glob(os.path.join(f'{hand}', pattern), recursive=True))
-#         for file in files:
-#             file_name = file.split('/')[-1]
-#             raw_df = _load_sensor_csv(file)
-#             inter_df = resample_and_interpolate_file(raw_df, target_interval_ns=2_000_000)
-#             inter_df.to_csv(f'Resampled/{hand}/res_{file_name}', index=False)
-
-
-
-
-
-def plot_acceleration_comparison(df, original_col, filtered_col, start_idx=0, end_idx=1000):
-    plt.figure(figsize=(15, 6))
-    
-    # חיתוך קטע קטן מהנתונים כדי שנראה את צורת הגל בבירור
-    subset = df.iloc[start_idx:end_idx]
-    
-    plt.plot(subset[3], subset[original_col], label='Raw Data (with Gravity)', alpha=0.6)
-    plt.plot(subset[3], subset[filtered_col], label='Linear Accel (Butterworth HPF)', linewidth=2)
-    
-    # הוספת קו אפס למניעת בלבול
-    plt.axhline(0, color='black', linestyle='--', alpha=0.5)
-    
-    plt.title(f'Gravity Removal Check: {original_col} vs {filtered_col}')
-    plt.xlabel('Time (ns)')
-    plt.ylabel('Acceleration (m/s^2)')
-    plt.legend()
-    plt.grid(True, alpha=0.3)
-    plt.show()
 
 def apply_highpass_to_all_files(root_dir: str, save_dir: str):
     for hand in ['Left', 'Right']:
@@ -273,5 +241,5 @@ def apply_highpass_to_all_files(root_dir: str, save_dir: str):
                         df[col] = apply_butterworth_highpass(data_col, cutoff_hz=cutoff, fs=500, order=order)
                 df.to_csv(f'{save_dir}/{hand}/{file.split("/")[-1]}', index=False)
 
-# apply_highpass_to_all_files(root_dir='Resampled', save_dir='Clean')
-plot_sampling_rate_histograms(stats_list=add_timestamp_diff_column(base_path='./', file_type='accel'), bins=50, save_path='Figures/Raw/sampling_consistency_accel_histograms.png')
+apply_highpass_to_all_files(root_dir='Resampled', save_dir='Clean')
+# plot_sampling_rate_histograms(stats_list=add_timestamp_diff_column(base_path='./', file_type='accel'), bins=50, save_path='Figures/Raw/sampling_consistency_accel_histograms.png')

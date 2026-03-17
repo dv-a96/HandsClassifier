@@ -674,7 +674,7 @@ def create_stats_dfs(root_dir: str, save_dir: str) -> None:
     Each DF contains: filename, axis, mean, std, variance, min, max, median, delta_min_max, count_negative, count_positive
     Saves as left_stats.csv and right_stats.csv in save_dir.
     """
-    stats_list = ['mean', 'std', 'variance', 'min', 'max', 'median', 'delta_min_max', 'count_negative', 'count_positive']
+    stats_list = ['mean', 'std', 'variance', 'min', 'max', 'median', 'delta_min_max', 'count_negative', 'count_positive', 'intensity']
     
     for hand in ['Left', 'Right']:
         hand_dir = f'{root_dir}/{hand}'
@@ -718,6 +718,8 @@ def create_stats_dfs(root_dir: str, save_dir: str) -> None:
                                     row[stat] = (series < 0).sum()/len(series)  # Count negative per second
                                 elif stat == 'count_positive':
                                     row[stat] = (series > 0).sum()/len(series)  # Count positve per second
+                                elif stat == 'intensity':
+                                    row[stat] = (series**2).mean()  # Average intensity (mean of squares)
                             data.append(row)
                 except Exception as e:
                     print(f"Error processing {fpath}: {e}")
@@ -737,7 +739,7 @@ def plot_stats_outliers(stats_csv_path, axis_name='z_sg', save_path=None):
         print(f"No data for axis {axis_name}")
         return
 
-    metrics = ['mean', 'std', 'variance', 'min', 'max', 'median', 'delta_min_max', 'count_negative', 'count_positive']
+    metrics = ['mean', 'std', 'variance', 'min', 'max', 'median', 'delta_min_max', 'count_negative', 'count_positive', 'intensity']
     cols = 3
     rows = (len(metrics) + cols - 1) // cols
     
@@ -994,9 +996,10 @@ def walk_and_analyze(root_dirs):
 
 def main():
 
-    plot_side_by_side_raw('Left', 'Right', 'accel', max_files=5, save_path='Left/SideBySide_accel.png')    
-    plot_side_by_side_raw('Left', 'Right', 'gyro', max_files=5, save_path='Left/SideBySide_gyro.png')    
-    
+    create_stats_dfs('Smoothed', 'Smoothed/Stats')
+    create_global_summary('Smoothed/Stats', 'Smoothed/global_summery.csv')
+    plot_comprehensive_hand_comparison(pd.read_csv('Smoothed/global_summery.csv'), 'gyro', 'Smoothed/gyro_stats_summery.png')
+    plot_comprehensive_hand_comparison(pd.read_csv('Smoothed/global_summery.csv'), 'accel', 'Smoothed/accel_stats_summery.png')    
     # for hand in ['Left', 'Right']:
     #     for file_type in ['accel', 'gyro']:
     #         for stat in ['mean', 'std', 'variance', 'min', 'max', 'median', 'delta_min_max', 'count_negative', 'count_positive']:
