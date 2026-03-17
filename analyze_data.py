@@ -353,7 +353,11 @@ def plot_side_by_side_raw(left_dir: str, right_dir: str, file_type: str, max_fil
             ax = axes[i][side]
             if i < len(files):
                 try:
-                    df = _load_sensor_csv(files[i])
+                    if "res" in files[i].lower():
+                        header=0
+                    else:
+                        header=None
+                    df = _load_sensor_csv(files[i], header=header)
                 except Exception as e:
                     ax.text(0.5, 0.5, str(e), ha='center', va='center')
                     ax.set_axis_off()
@@ -366,8 +370,8 @@ def plot_side_by_side_raw(left_dir: str, right_dir: str, file_type: str, max_fil
                     if col in df.columns:
                         ax.plot(df['timestamp'], df[col], color=colors[j], linewidth=1)
                 ax.set_title(os.path.basename(files[i]))
-                ax.set_xlabel('Time (s)')
-                ax.set_ylabel('Acceleration' if file_type == 'accel' else 'Angular Velocity')
+                ax.set_xlabel('Time (ns)')
+                ax.set_ylabel('Acceleration(m/s^2)' if file_type == 'accel' else 'Angular Velocity(rad/s)')
                 ax.grid(True, alpha=0.3)
             else:
                 ax.set_axis_off()
@@ -988,7 +992,10 @@ def walk_and_analyze(root_dirs):
 
 
 
-def main():    
+def main():
+
+    plot_side_by_side_raw('Left', 'Right', 'accel', max_files=5, save_path='Left/SideBySide_accel.png')    
+    plot_side_by_side_raw('Left', 'Right', 'gyro', max_files=5, save_path='Left/SideBySide_gyro.png')    
     
     # for hand in ['Left', 'Right']:
     #     for file_type in ['accel', 'gyro']:
@@ -1006,10 +1013,10 @@ def main():
     # plot_comprehensive_hand_comparison(df, 'gyro', 'Smoothed/gyro_stas_summery.png')
     # plot_comprehensive_hand_comparison(df, 'accel', 'Smoothed/accel_stas_summery.png')
 
-    for hand in ['Left', 'Right']:
-        for file_type in ['accel', 'gyro']:
-            for axis in ['x', 'y', 'z']:
-                plot_stats_outliers(f'Smoothed/Stats/{hand.lower()}_{file_type}_stats.csv', f'{axis}_sg', f'Smoothed/{hand.lower()}_{file_type}_{axis}_sg_outliers.png')
+    # for hand in ['Left', 'Right']:
+    #     for file_type in ['accel', 'gyro']:
+    #         for axis in ['x', 'y', 'z']:
+    #             plot_stats_outliers(f'Smoothed/Stats/{hand.lower()}_{file_type}_stats.csv', f'{axis}_sg', f'Smoothed/{hand.lower()}_{file_type}_{axis}_sg_outliers.png')
 
 if __name__ == "__main__":
     main()
