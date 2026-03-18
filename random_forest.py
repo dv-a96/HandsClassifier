@@ -70,7 +70,7 @@ def reshape_sensor_data(df):
     """
     # Define the statistical metrics to be extracted
     stats_cols = ['mean', 'std', 'variance', 'min', 'max', 'median', 
-                  'delta_min_max', 'count_negative', 'count_positive', 'intensity']
+                  'delta_min_max', 'count_negative', 'count_positive', 'intensity', 'skewness']
     
     # Pivot the table: Transform axis values (rows) into new columns
     # This organizes the data so each unique file has exactly one row
