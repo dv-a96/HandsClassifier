@@ -9,7 +9,8 @@ from analyze_data import _load_sensor_csv
 
 def add_timestamp_diff_column(base_path: str, file_type: str):
     """
-    עוברת על Left ואז Right, מוסיפה טור הפרשי זמן ושומרת את הקובץ.
+    Iterates through Left and Right hand directories, adds a time difference column, 
+    and returns processing statistics.
     """
     hands = ['Left', 'Right']
     processed_stats = []
@@ -20,19 +21,19 @@ def add_timestamp_diff_column(base_path: str, file_type: str):
         files = sorted(glob.glob(os.path.join(hand_dir, pattern), recursive=True))
         
         for fpath in files:
+            # Resampled files already contain headers; raw files do not
             if "resampled" in fpath.lower():
-                header = 0  # קבצי Resampled כבר כוללים כותרת
+                header = 0  
             else:
                 header = None
+            
             df = _load_sensor_csv(fpath, header=header)
             
-            # חישוב ההפרשים (בננו-שניות, או ביחידות של הטור המקורי)
-            # אם timestamp הוא זמן מוחלט - זה ייתן את ה-Sampling Interval
-            # אם timestamp הוא כבר הפרש - זה ייתן את ה-Jitter
+            # Calculate time intervals (Sampling Interval)
+            # This represents the gap between consecutive samples in nanoseconds
             df['ts_diff'] = pd.to_numeric(df['timestamp'], errors='coerce').diff()
             
-            
-            # איסוף סטטיסטיקה לגרף
+            # Collect statistics for visualization
             valid_diffs = df['ts_diff'].dropna()
             processed_stats.append({
                 'filename': os.path.basename(fpath),
@@ -40,7 +41,7 @@ def add_timestamp_diff_column(base_path: str, file_type: str):
                 'min': valid_diffs.min(),
                 'max': valid_diffs.max(),
                 'mean': valid_diffs.mean(),
-                'all_diffs': valid_diffs.values # נשמור את הכל לטובת ה"דרך החכמה"
+                'all_diffs': valid_diffs.values # Storing all values for boxplot/histogram analysis
             })
             
     return processed_stats
@@ -48,7 +49,7 @@ def add_timestamp_diff_column(base_path: str, file_type: str):
 
 def plot_sampling_consistency(stats_list: list, save_path: str=None):
     """
-    מציגה את טווח ההפרשים לכל קובץ.
+    Generates a Boxplot to visualize the consistency of sampling intervals across all files.
     """
     filenames = [s['filename'] for s in stats_list]
     all_data = [s['all_diffs'] for s in stats_list]
@@ -56,23 +57,21 @@ def plot_sampling_consistency(stats_list: list, save_path: str=None):
 
     plt.figure(figsize=(15, 7))
     
-    # הדרך החכמה: Boxplot
-    # מראה חציון, רבעונים ו-Outliers (נקודות חריגות שמעידות על איבוד דגימות)
+    # Use Boxplot to show Median, Quartiles, and Outliers (which indicate dropped samples)
     bp = plt.boxplot(all_data, tick_labels=filenames, patch_artist=True)
     
-    # צביעה לפי יד
+    # Color coding by hand side
     for i in range(len(bp['boxes'])):
-            # צביעת גוף הקופסה (שכרגע לא רואים כי היא שטוחה)
+            # Set the box body color
             bp['boxes'][i].set_facecolor(colors[i])
             bp['boxes'][i].set_alpha(0.5)
             
-            # --- התיקון כאן: צביעת קו החציון בצבע של היד ---
-            # זה יגרום לקווים של יד שמאל להפוך לכחולים!
+            # Set median line color and width for better visibility
             bp['medians'][i].set_color(colors[i]) 
             bp['medians'][i].set_linewidth(2)
 
     plt.xticks(rotation=45, ha='right')
-    plt.ylabel('Timestamp (ns)')
+    plt.ylabel('Timestamp Interval (ns)')
     plt.title('Sampling Consistency Check (Boxplot per File)\nBlue: Left Hand | Orange: Right Hand')
     plt.grid(axis='y', linestyle='--', alpha=0.7)
     
@@ -84,13 +83,8 @@ def plot_sampling_consistency(stats_list: list, save_path: str=None):
 
 def plot_sampling_rate_histograms(stats_list, bins=50, save_path=None):
     """
-    Generates a histogram for each file in the stats_list to visualize sampling consistency.
-    Includes vertical lines for median and quartiles, and a summary box for min/max/uniques.
-    
-    Parameters:
-    - stats_list (list): List of dictionaries containing 'filename', 'all_diffs', 'hand', etc.
-    - bins (int): Number of bins for the histogram.
-    - save_path (str): Full path to save the resulting plot. If None, displays the plot.
+    Generates a histogram for each file to visualize sampling interval distribution.
+    Includes vertical lines for median/quartiles and a summary box for metrics.
     """
     num_files = len(stats_list)
     cols = 2
@@ -121,7 +115,6 @@ def plot_sampling_rate_histograms(stats_list, bins=50, save_path=None):
         ax.axvline(q3, color='green', linestyle=':', linewidth=1.5)
         
         # 4. Annotate Lines with Values
-        # Using xaxis_transform to place text at the top of the plot area
         trans = ax.get_xaxis_transform() 
         ax.text(median, 0.95, f' Med: {median:,.0f}', color='red', transform=trans, fontweight='bold', ha='left')
         ax.text(q1, 0.88, f' Q1: {q1:,.0f}', color='green', transform=trans, ha='right')
@@ -132,28 +125,26 @@ def plot_sampling_rate_histograms(stats_list, bins=50, save_path=None):
                       f"Max: {d_max:,.0f} ns\n"
                       f"Unique Diffs: {unique_counts}")
         
-        # Place the text box in the upper right corner of the individual subplot
+        # Positioning text box in upper right corner of the individual plot
         ax.text(0.95, 0.75, stats_text, transform=ax.transAxes, 
                 verticalalignment='top', horizontalalignment='right',
                 bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='gray'))
 
-        # Set plot metadata
+        # Format axes
         ax.xaxis.set_major_formatter(ScalarFormatter(useOffset=False))
         ax.set_title(f"File: {s['filename']} ({s['hand']})", fontsize=14, fontweight='bold')
         ax.set_xlabel("Time Difference (ns)")
-        ax.set_yscale('log')  # Log scale for better visibility of outliers
+        ax.set_yscale('log')  # Log scale used to emphasize outliers/jitter
         ax.set_ylabel("Log Frequency")
         ax.grid(axis='y', linestyle='--', alpha=0.3)
 
-    # Hide any unused subplots in the grid
+    # Hide any unused subplots
     for j in range(i + 1, len(axes)):
         axes[j].axis('off')
 
     plt.tight_layout()
     
-    # Save or Show logic
     if save_path:
-        # Ensure the directory exists before saving
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         plt.savefig(save_path, dpi=300)
         print(f"Histogram plot saved successfully to: {save_path}")
@@ -162,58 +153,59 @@ def plot_sampling_rate_histograms(stats_list, bins=50, save_path=None):
 
 def resample_and_interpolate_file(df, target_interval_ns=2_000_000):
     """
-    מבצעת יישור (Alignment) של הנתונים לרשת זמן קבועה וביצוע אינטרפולציה.
+    Aligns sensor data to a fixed time grid (e.g., every 2ms) using linear interpolation.
+    This fixes irregular sampling rates before applying digital filters.
     """
-    # 1. הבטחת טיפוס נתונים מספרי וניקוי כפילויות זמן
+    # 1. Ensure numeric data types and clean timestamp duplicates
     df = df.copy()
     df['timestamp'] = pd.to_numeric(df['timestamp'], errors='coerce')
     df = df.dropna(subset=['timestamp'])
     
-    # אם יש שתי דגימות על אותה ננו-שנייה, ניקח את הממוצע שלהן
+    # Average values if two samples occur on the exact same nanosecond
     df = df.groupby('timestamp').mean().reset_index()
     
-    # 2. קביעת האינדקס כזמן
+    # 2. Set timestamp as index for time-based operations
     df = df.set_index('timestamp')
     
-    # 3. יצירת ציר הזמן ה"מושלם"
-    # מתחילים מהדגימה הראשונה וקופצים ב-2ms עד האחרונה
+    # 3. Create a "Perfect Grid"
+    # Generates a sequence from start to end with a constant 2ms interval (500Hz)
     start_time = df.index.min()
     end_time = df.index.max()
     perfect_grid = np.arange(start_time, end_time, target_interval_ns)
     
-    # 4. ביצוע ה-Resampling:
-    # אנחנו משלבים את האינדקס הקיים עם האינדקס החדש כדי לא לאבד מידע בזמן החישוב
+    # 4. Perform Alignment:
+    # Combine original indexes with the perfect grid to prevent data loss during calculation
     combined_index = np.unique(np.concatenate([df.index, perfect_grid]))
     df_aligned = df.reindex(combined_index)
     
-    # 5. אינטרפולציה לינארית למילוי כל החורים (גם הברחנים הגבוהים וגם הנמוכים)
+    # 5. Linear Interpolation to fill the gaps between original samples
     df_interpolated = df_aligned.interpolate(method='linear')
     
-    # 6. חיתוך רק של הנקודות שיושבות בדיוק על הרשת שלנו
+    # 6. Extraction: Keep only the points that match our target grid exactly
     df_final = df_interpolated.loc[perfect_grid]
     
     return df_final.reset_index()
 
 
 def apply_butterworth_highpass(data, cutoff_hz, fs, order=4):
-    # 1. חישוב תדר נייקוויסט (Nyquist Frequency)
-    # זהו התדר המקסימלי שניתן למדוד, והוא תמיד מחצית מקצב הדגימה.
+    """
+    Applies a High-pass Butterworth filter to remove DC components (like gravity).
+    """
+    # 1. Calculate Nyquist Frequency
+    # Maximum measurable frequency, always half the sampling rate (fs/2).
     nyq = 0.5 * fs
     
-    # 2. נרמול תדר החיתוך (Normalized Cutoff)
-    # פונקציות העיבוד הדיגיטלי מצפות לערך בין 0 ל-1, 
-    # כאשר 1 מייצג את תדר נייקוויסט.
+    # 2. Normalize Cutoff Frequency
+    # Digital filters expect a value between 0 and 1, where 1 is the Nyquist Frequency.
     normal_cutoff = cutoff_hz / nyq
     
-    # 3. תכנון המסנן (Design)
-    # הפונקציה butter מחזירה שני מערכים של מקדמים: b ו-a.
-    # המקדמים האלו הם בעצם ה"נוסחה המתמטית" של הפילטר.
-    # btype='high' אומר למחשב שאנחנו רוצים High-pass (להעביר גבוהים, לחסום נמוכים).
+    # 3. Filter Design
+    # Returns 'b' (numerator) and 'a' (denominator) coefficients of the filter formula.
+    # btype='high' creates a High-pass filter (blocks lows, passes highs).
     b, a = butter(order, normal_cutoff, btype='high', analog=False)
     
-    # 4. הפעלת המסנן (Execution)
-    # filtfilt (ולא lfilter) עוברת על הנתונים קדימה ואז אחורה.
-    # זה מבטיח שלא יהיה עיכוב (Phase Shift) בגרף - התנועה תישאר בדיוק באותו זמן.
+    # 4. Filter Execution
+    # Using 'filtfilt' (Zero-phase filtering) to avoid time delays (Phase Shift).
     filtered_data = filtfilt(b, a, data)
     
     return filtered_data
@@ -221,25 +213,31 @@ def apply_butterworth_highpass(data, cutoff_hz, fs, order=4):
 
 
 def apply_highpass_to_all_files(root_dir: str, save_dir: str):
+    """
+    Processes all files in the directory tree, applying high-pass filtering to each axis.
+    """
     for hand in ['Left', 'Right']:
         for file_type in ['accel', 'gyro']:
             pattern = f"**/*{file_type}.csv"
             files = sorted(glob.glob(os.path.join(root_dir, f'{hand}', pattern), recursive=True))
             for file in files:
-                df = _load_sensor_csv(file, header=0)  # Assuming resampled files have headers
+                df = _load_sensor_csv(file, header=0)  
+                
                 if file_type == 'accel':
-                    cutoff = 0.6  # עלייה קלה לניקוי גרביטציה טוב יותר
+                    cutoff = 0.6  # Optimal for gravity removal
                     order = 4
-                    cols_to_filter = ['accel_x', 'accel_y', 'accel_z'] # חובה את כל הצירים!
+                    cols_to_filter = ['accel_x', 'accel_y', 'accel_z'] 
                 else:
-                    cutoff = 0.1  # מעולה לניקוי Bias
+                    cutoff = 0.1  # Optimal for gyroscope bias drift cleaning
                     order = 2
                     cols_to_filter = ['gyro_x', 'gyro_y', 'gyro_z']
                 
                 for col in cols_to_filter:
                         data_col = pd.to_numeric(df[col], errors='coerce').fillna(0)
                         df[col] = apply_butterworth_highpass(data_col, cutoff_hz=cutoff, fs=500, order=order)
+                
+                # Save processed data to the target directory
                 df.to_csv(f'{save_dir}/{hand}/{file.split("/")[-1]}', index=False)
 
+# Start Processing
 apply_highpass_to_all_files(root_dir='Resampled', save_dir='Clean')
-# plot_sampling_rate_histograms(stats_list=add_timestamp_diff_column(base_path='./', file_type='accel'), bins=50, save_path='Figures/Raw/sampling_consistency_accel_histograms.png')

@@ -731,14 +731,21 @@ def create_stats_dfs(root_dir: str, save_dir: str) -> None:
                 print(f"Stats DF saved to: {out_path}")
 
 
+
 def plot_stats_outliers(stats_csv_path, axis_name='z_sg', save_path=None):
+    """
+    Identifies and visualizes outliers for each statistical metric using the IQR method.
+    Annotates outlier points with their respective filenames for easy debugging.
+    """
     df = pd.read_csv(stats_csv_path)
+    # Filter data for the specific axis (e.g., 'z_sg')
     df_axis = df[df['axis'] == axis_name].copy()
     
     if df_axis.empty:
         print(f"No data for axis {axis_name}")
         return
 
+    # List of metrics to evaluate for outliers
     metrics = ['mean', 'std', 'variance', 'min', 'max', 'median', 'delta_min_max', 'count_negative', 'count_positive', 'intensity']
     cols = 3
     rows = (len(metrics) + cols - 1) // cols
@@ -753,15 +760,20 @@ def plot_stats_outliers(stats_csv_path, axis_name='z_sg', save_path=None):
             ax.set_visible(False)
             continue
             
+        # Calculate Interquartile Range (IQR) for outlier detection
         q1, q3 = series.quantile(0.25), series.quantile(0.75)
         iqr = q3 - q1
+        # Standard Tukey's fences: 1.5 * IQR
         lower_bound, upper_bound = q1 - 1.5 * iqr, q3 + 1.5 * iqr
         
-        # תיקון tick_labels כדי למנוע את האזהרה
+        # Plot the boxplot - fixed tick_labels to avoid Matplotlib warnings
         bp = ax.boxplot(series, patch_artist=True, tick_labels=[metric])
         bp['boxes'][0].set(facecolor='lightgreen', alpha=0.5)
         
+        # Identify files that fall outside the calculated bounds
         outliers = df_axis[(df_axis[metric] < lower_bound) | (df_axis[metric] > upper_bound)]
+        
+        # Annotate each outlier point with its original filename
         for _, row in outliers.iterrows():
             ax.annotate(row['filename'], xy=(1, row[metric]), xytext=(15, 0),
                         textcoords='offset points', fontsize=7, color='darkred',
@@ -770,8 +782,8 @@ def plot_stats_outliers(stats_csv_path, axis_name='z_sg', save_path=None):
         ax.set_title(f'Metric: {metric}', fontweight='bold')
         ax.grid(axis='y', linestyle='--', alpha=0.3)
 
-    # --- הוספת המקרא (Legend) ---
-    # יצירת אלמנטים גרפיים להסבר
+    # --- Legend Construction ---
+    # Create visual proxy elements for the plot legend
     legend_elements = [
         mpatches.Patch(facecolor='lightgreen', alpha=0.5, edgecolor='black', label='IQR Range (25%-75%)'),
         Line2D([0], [0], color='orange', lw=2, label='Median Value'),
@@ -779,7 +791,7 @@ def plot_stats_outliers(stats_csv_path, axis_name='z_sg', save_path=None):
         Line2D([0], [0], color='red', marker='>', markersize=8, label='File Label (Outlier Name)', linestyle='none', alpha=0.6)
     ]
     
-    # מיקום המקרא בחלק העליון של האיור
+    # Position the global legend outside the subplots
     fig.legend(handles=legend_elements, loc='upper left', bbox_to_anchor=(0.98, 0.98), 
                ncol=1, fontsize=10, frameon=True, shadow=True, title="Legend")
 
@@ -793,45 +805,54 @@ def plot_stats_outliers(stats_csv_path, axis_name='z_sg', save_path=None):
     else:
         plt.show()
 
-
-
-
 def create_global_summary(stats_dir: str, out_path: str = None) -> pd.DataFrame:
+    """
+    Aggregates individual statistics files into a single global summary table.
+    Categorizes data by Hand (Left/Right), Sensor (Accel/Gyro), and Axis.
+    """
     all_data = []
+    # Find all individual stats CSV files
     files = glob.glob(os.path.join(stats_dir, "*_stats.csv"))
     
     for fpath in files:
         df = pd.read_csv(fpath)
         filename = os.path.basename(fpath)
+        # Parse metadata (hand side and sensor type) from the filename
         parts = filename.split('_')
         df['hand'] = parts[0].capitalize()
         df['sensor'] = parts[1].capitalize()
         all_data.append(df)
     
     if not all_data:
+        print("No statistics files found to summarize.")
         return None
 
+    # Merge all individual dataframes into one large master dataframe
     master_df = pd.concat(all_data, ignore_index=True)
 
-    # 1. הגדרת הקבוצות והטורים לחישוב
+    # 1. Define groups and target columns for aggregation
     group_cols = ['hand', 'sensor', 'axis']
-    # רשימת הטורים לחישוב (כל מה שהוא מספר ולא חלק מהקבוצות)
+    # Select all numeric columns for calculation, excluding grouping and filename columns
     stat_cols = [c for c in master_df.columns if c not in group_cols + ['filename']]
 
-    # 2. שימוש במילון (Dictionary) בתוך ה-agg
-    # זו הדרך הכי בטוחה ב-Pandas למנוע את ה-IndexError עם העמודה 'axis'
+    # 2. Map metrics using an aggregation dictionary
+    # This ensures safe calculation of Mean and Std for every feature
     agg_dict = {col: ['mean', 'std'] for col in stat_cols}
     
-    # 3. ביצוע ה-Groupby בלי לבחור טורים מראש בסוגריים מרובעים
+    # 3. Execute Groupby and Aggregate
+    # Groups data by Hand, Sensor, and Axis to find general patterns
     summary = master_df.groupby(group_cols).agg(agg_dict)
 
-    # 4. שיטוח שמות העמודות
+    # 4. Flatten MultiIndex column names for cleaner CSV output
+    # Example: ('intensity', 'mean') becomes 'intensity_avg'
     summary.columns = [f"{col[0]}_{'avg' if col[1]=='mean' else 'std_dev'}" for col in summary.columns]
     summary = summary.reset_index()
 
     if out_path:
+        # Ensure the output directory exists and save the final summary
+        os.makedirs(os.path.dirname(out_path), exist_ok=True)
         summary.to_csv(out_path, index=False)
-        print(f"Global summary saved to: {out_path}")
+        print(f"Global summary successfully saved to: {out_path}")
         
     return summary
 
@@ -841,7 +862,7 @@ def plot_hand_summery_comparison(summary_df: pd.DataFrame, sensor_type: str, met
     Creates a bar plot comparing Left vs Right hand for a specific sensor and metric.
     Uses error bars to represent the standard deviation of the metric.
     """
-    # 1. סינון הנתונים לחיישן המבוקש
+    # 1. Filter data for the requested sensor type
     sensor_df = summary_df[summary_df['sensor'] == sensor_type.capitalize()]
     
     if sensor_df.empty:
@@ -851,19 +872,19 @@ def plot_hand_summery_comparison(summary_df: pd.DataFrame, sensor_type: str, met
     axes_names = sensor_df['axis'].unique()
     hands = ['Left', 'Right']
     
-    # הגדרת שמות העמודות הרלוונטיות
+    # Define relevant column names for mean and standard deviation
     avg_col = f"{metric}_avg"
     std_col = f"{metric}_std_dev"
     
     fig, ax = plt.subplots(figsize=(10, 6))
     
-    x = np.arange(len(axes_names))  # מיקומי הצירים (x, y, z)
-    width = 0.35  # רוחב המוטות
+    x = np.arange(len(axes_names))  # Positions for the axes (x, y, z)
+    width = 0.35  # Width of the bars
     
-    # 2. ציור המוטות לכל יד
+    # 2. Plot bars for each hand
     for i, hand in enumerate(hands):
         hand_data = sensor_df[sensor_df['hand'] == hand]
-        # וודא שהנתונים ממוינים לפי סדר הצירים
+        # Ensure data is sorted according to the axis order
         hand_data = hand_data.set_index('axis').loc[axes_names]
         
         means = hand_data[avg_col]
@@ -872,7 +893,7 @@ def plot_hand_summery_comparison(summary_df: pd.DataFrame, sensor_type: str, met
         ax.bar(x + (i * width) - width/2, means, width, 
                yerr=stds, label=hand, capsize=5, alpha=0.8)
 
-    # 3. עיצוב הגרף
+    # 3. Chart styling and formatting
     ax.set_xlabel('Axis')
     ax.set_ylabel(f'Value ({metric})')
     ax.set_title(f'Comparison of {metric.capitalize()} by Hand ({sensor_type})')
