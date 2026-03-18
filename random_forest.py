@@ -14,8 +14,8 @@ def train_hand_classifier(features_path):
     df = pd.read_csv(features_path)
     
     # הסרת עמודות מזהות שלא אמורות להיכנס למודל
-    X = df.drop(columns=['hand', 'filename'], errors='ignore')
-    y = df['label']  # עמודת המטרה (0/1) שהוספנו בשלב יצירת הטבלה הסופית
+    X = df.drop(columns=['label_accel', 'label_gyro', 'filename_clean', 'filename_accel', 'filename_gyro'], errors='ignore')
+    y = df['label_accel']
     
     # 2. קידוד המטרה (Left/Right -> 0/1)
     le = LabelEncoder()
@@ -72,7 +72,7 @@ def reshape_sensor_data(df):
     
     # Pivot the table: Index stays as filename, Axis values become new columns
     # We use pivot_table to handle the reorganization efficiently
-    pivoted = df.pivot_table(index='filename', columns='axis', values=stats_cols)
+    pivoted = df.pivot_table(index=['filename', 'label'], columns='axis', values=stats_cols)
     
     # Flatten MultiIndex columns: ('mean', 'x') -> 'x_mean'
     pivoted.columns = [f"{axis}_{metric}" for metric, axis in pivoted.columns]
@@ -82,7 +82,7 @@ def reshape_sensor_data(df):
 def create_final_feature_matrix(accel_stats_df, gyro_stats_df):
     """
     Step 2: Merge the processed Accel and Gyro DataFrames based on filename.
-    """
+    """            
     # 1. Reshape both DataFrames using Step 1
     accel_flat = reshape_sensor_data(accel_stats_df)
     gyro_flat = reshape_sensor_data(gyro_stats_df)
@@ -112,5 +112,40 @@ def create_final_feature_matrix(accel_stats_df, gyro_stats_df):
 # הרצה לדוגמה (וודא שסיפקת את הנתיב הנכון לקובץ הפיצ'רים שלך)
 # model, encoder = train_hand_classifier('path_to_your_features.csv')
 
+
+# left_accel_df = pd.read_csv('Smoothed/Stats/left_accel_stats.csv')
+# left_gyro_df = pd.read_csv('Smoothed/Stats/left_gyro_stats.csv')
+# right_accel_df = pd.read_csv('Smoothed/Stats/right_accel_stats.csv')
+# right_gyro_df = pd.read_csv('Smoothed/Stats/right_gyro_stats.csv')
+# left_accel_df['label'] = 'Left'
+# left_gyro_df['label'] = 'Left'
+# right_accel_df['label'] = 'Right'
+# right_gyro_df['label'] = 'Right'
+# print("orig columns:", left_accel_df.columns)
+# print("left_accel_df shape:", left_accel_df.shape)
+# print("left_gyro_df shape:", left_gyro_df.shape)
+# print("right_accel_df shape:", right_accel_df.shape)
+# print("right_gyro_df shape:", right_gyro_df.shape)
+# left_accel_reshaped = reshape_sensor_data(left_accel_df)
+# left_gyro_reshaped = reshape_sensor_data(left_gyro_df)
+# right_accel_reshaped = reshape_sensor_data(right_accel_df)
+# right_gyro_reshaped = reshape_sensor_data(right_gyro_df)
+# print("reshaped columns:", left_accel_reshaped.columns)
+# print("left_accel_reshaped shape:", left_accel_reshaped.shape)
+# print("left_gyro_reshaped shape:", left_gyro_reshaped.shape)
+# print("right_accel_reshaped shape:", right_accel_reshaped.shape)
+# print("right_gyro_reshaped shape:", right_gyro_reshaped.shape)
+# final_left_data = create_final_feature_matrix(left_accel_df, left_gyro_df)
+# print("final_left_data columns:", final_left_data.columns)
+# print("final_left_data shape:", final_left_data.shape)
+# final_right_data = create_final_feature_matrix(right_accel_df, right_gyro_df)
+# print("final_right_data columns:", final_right_data.columns)
+# print("final_right_data shape:", final_right_data.shape)
+# final_data = pd.concat([final_left_data, final_right_data], ignore_index=True)
+# print("final_data columns:", final_data.columns)
+# print("final_data shape:", final_data.shape)
+
+
+# final_data.to_csv("master_features.csv", index=False)
 
 train_hand_classifier('master_features.csv')
