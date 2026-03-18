@@ -585,7 +585,8 @@ def plot_hand_stats_bars(hand_dir: str, file_type: str, stat_name: str, max_file
     # 1. Define and validate supported statistics
     supported_stats = [
         'mean', 'std', 'variance', 'min', 'max', 'median',
-        'delta_min_max', 'count_negative', 'count_positive', 'intensity', 'skewness'
+        'delta_min_max', 'count_negative', 'count_positive', 'intensity', 'skewness',
+        'argmax', 'argmin', 'zcr'
     ]
     if stat_name not in supported_stats:
         raise ValueError(f"stat_name must be one of {supported_stats}")
@@ -631,6 +632,9 @@ def plot_hand_stats_bars(hand_dir: str, file_type: str, stat_name: str, max_file
                     elif stat_name == 'count_positive': val = (series > 0).sum()
                     elif stat_name == 'intensity': val = (series**2).mean()  # Average intensity (mean of squares)
                     elif stat_name == 'skewness': val = series.skew()
+                    elif stat_name == 'argmax': val = series.idxmax()/len(series)  # Normalized index of max value
+                    elif stat_name == 'argmin': val = series.idxmin()/len(series)  # Normalized index of min value
+                    elif stat_name == 'zcr': val = ((series[:-1].values * series[1:].values) < 0).sum() / (len(series) - 1)  # Zero-crossing rate
                     
                     stat_values.append(val)
                 else:
@@ -676,7 +680,8 @@ def create_stats_dfs(root_dir: str, save_dir: str) -> None:
     Each DF contains: filename, axis, mean, std, variance, min, max, median, delta_min_max, count_negative, count_positive
     Saves as left_stats.csv and right_stats.csv in save_dir.
     """
-    stats_list = ['mean', 'std', 'variance', 'min', 'max', 'median', 'delta_min_max', 'count_negative', 'count_positive', 'intensity', 'skewness']
+    stats_list = ['mean', 'std', 'variance', 'min', 'max', 'median', 'delta_min_max', 'count_negative', 'count_positive', 'intensity', 'skewness',
+                  'argmax', 'argmin', 'zcr']
     
     for hand in ['Left', 'Right']:
         hand_dir = f'{root_dir}/{hand}'
@@ -724,6 +729,12 @@ def create_stats_dfs(root_dir: str, save_dir: str) -> None:
                                     row[stat] = (series**2).mean()  # Average intensity (mean of squares)
                                 elif stat == 'skewness':
                                     row[stat] = series.skew()
+                                elif stat == 'argmax':
+                                    row[stat] = series.idxmax()/len(series)  # Normalized index of max value
+                                elif stat == 'argmin':
+                                    row[stat] = series.idxmin()/len(series)  # Normalized index of min value
+                                elif stat == 'zcr':
+                                    row[stat] = ((series[:-1].values * series[1:].values) < 0).sum() / (len(series) - 1)  # Zero-crossing rate
                             data.append(row)
                 except Exception as e:
                     print(f"Error processing {fpath}: {e}")
@@ -750,7 +761,8 @@ def plot_stats_outliers(stats_csv_path, axis_name='z_sg', save_path=None):
         return
 
     # List of metrics to evaluate for outliers
-    metrics = ['mean', 'std', 'variance', 'min', 'max', 'median', 'delta_min_max', 'count_negative', 'count_positive', 'intensity', 'skewness']
+    metrics = ['mean', 'std', 'variance', 'min', 'max', 'median', 'delta_min_max', 'count_negative', 'count_positive', 'intensity', 'skewness',
+               'argmax', 'argmin', 'zcr']
     cols = 3
     rows = (len(metrics) + cols - 1) // cols
     
