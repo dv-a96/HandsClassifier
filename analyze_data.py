@@ -442,7 +442,77 @@ def smooth_and_save_hand_data(hand_dir: str, save_dir: str, file_type: str, max_
         print(f"Smoothed data saved to: {out_path}")
 
 
-def plot_hand_axis_raw(hand_dir:str, axis: str, file_type: str, max_files: int = 5, save_path: str = None) -> plt.Figure:
+def plot_axis_data(file_path: str, axis: str, file_type: str, raw: bool = False, save_path: str = None, ax=None) -> plt.Figure:
+    """Plot the axis data of a given file on a specific axis or a new figure."""
+    try:
+        df = _load_sensor_csv(file_path, header=0 if not raw else None)
+        # המרת זמן - לוגיקה מאוחדת
+        time_col = "timestamp" if not raw else df.columns[-1]
+        df["time_sec"] = df[time_col].cumsum() / 1e9
+        filename = os.path.basename(file_path)
+        if not raw:
+            if filename.startswith("res"):
+                col_name = f"{axis}"
+            else:
+                col_name = f"{file_type}_{axis}"
+        else:
+            axis_map = {'x': 0, 'y': 1, 'z': 2}
+            col_name = df.columns[axis_map[axis]]
+
+        if col_name not in df.columns:
+            print(f"Column {col_name} not found in {file_path}")
+            return None
+
+        # אם לא קיבלנו AX, ניצור figure חדש
+        fig = None
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(12, 6))
+        else:
+            fig = ax.get_figure()
+
+        ax.plot(df["time_sec"], df[col_name], color='blue', label=f'{axis.upper()}-axis', linewidth=1)
+        ax.set_xlabel('Time (seconds)')
+        ylabel = 'Acceleration(m/s^2)' if file_type == 'accel' else 'Angular Velocity(rad/s)'
+        ax.set_ylabel(ylabel)
+        ax.set_title(f"{os.path.basename(file_path)}", loc='left', fontsize=10)
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+
+        if save_path and fig:
+            fig.savefig(save_path, dpi=150, bbox_inches='tight')
+            
+        return fig
+    except Exception as e:
+        print(f"Error in plot_axis_data: {e}")
+        return None
+
+def plot_hand_data(hand_dir: str, axis: str, file_type: str, max_files: int = 5, raw: bool = False, save_path: str = None) -> plt.Figure:
+    """Plot data for a specific hand and axis across multiple files using plot_axis_data."""
+    pattern = f"**/*{file_type}.csv"
+    files = sorted(glob.glob(os.path.join(hand_dir, pattern), recursive=True))[:max_files]
+    
+    if not files:
+        print(f"No {file_type} files found in {hand_dir}")
+        return None
+
+    # יצירת הקנבס עם מספר subplots כמספר הקבצים
+    fig, axes = plt.subplots(len(files), 1, figsize=(14, 4 * len(files)), squeeze=False)
+    
+    for i, fpath in enumerate(files):
+        # קריאה לפונקציה המקורית ושליחת ה-AX הספציפי
+        plot_axis_data(file_path=fpath, axis=axis, file_type=file_type, raw=raw, ax=axes[i, 0])
+
+    fig.suptitle(f'Hand: {os.path.basename(hand_dir).upper()} | Axis: {axis.upper()} | Mode: {file_type.upper()}', fontsize=16)
+    fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+    
+    if save_path:
+        fig.savefig(save_path, dpi=150, bbox_inches='tight')
+        print(f"Combined plot saved as '{save_path}'")
+        
+    return fig
+
+
+def plot_hand_axis_raw(hand_dir:str, axis: str, file_type: str, max_files: int = 5, raw: str = False, save_path: str = None) -> plt.Figure:
     """Plot raw data for a specific hand and axis across multiple files. Plot with dual smoothing layers:
     1. Raw Data: Faint background to show noise levels.
     2. Moving Average: Trend line for general behavior.
@@ -488,12 +558,11 @@ def plot_hand_axis_raw(hand_dir:str, axis: str, file_type: str, max_files: int =
     fig, axes = plt.subplots(len(files), 1, figsize=(14, 4 * len(files)), squeeze=False)
     colors = {"x": "red", "y": "green", "z": "blue"}
     main_color = colors[axis]
-
+    header = None if raw else 0  # If raw=True, we expect no header. If raw=False, we expect smoothed files with headers.
     for i, fpath in enumerate(files):
         ax = axes[i, 0]
         try:
-            # Assuming _load_sensor_csv is defined elsewhere in your script
-            df = _load_sensor_csv(fpath, header=0)  # Assuming smoothed files have headers
+            df = _load_sensor_csv(fpath, header=header)
             col = f"{file_type}_{axis}"
             
             if col not in df.columns:
@@ -1058,5 +1127,5 @@ def main():
     #         for axis in ['x', 'y', 'z']:
     #             plot_stats_outliers(f'Smoothed/Stats/{hand.lower()}_{file_type}_stats.csv', f'{axis}_sg', f'Smoothed/{hand.lower()}_{file_type}_{axis}_sg_outliers.png')
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     main()

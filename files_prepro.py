@@ -135,7 +135,7 @@ def plot_sampling_rate_histograms(stats_list, bins=50, save_path=None):
         ax.set_title(f"File: {s['filename']} ({s['hand']})", fontsize=14, fontweight='bold')
         ax.set_xlabel("Time Difference (ns)")
         ax.set_yscale('log')  # Log scale used to emphasize outliers/jitter
-        ax.set_ylabel("Log Frequency")
+        ax.set_ylabel("Frequency (Log Scale)")
         ax.grid(axis='y', linestyle='--', alpha=0.3)
 
     # Hide any unused subplots
@@ -156,16 +156,19 @@ def resample_and_interpolate_file(df, target_interval_ns=2_000_000):
     Aligns sensor data to a fixed time grid (e.g., every 2ms) using linear interpolation.
     This fixes irregular sampling rates before applying digital filters.
     """
+    target_col = 'timestamp'
+    if "timestamp" not in df.columns:
+        target_col = 3
     # 1. Ensure numeric data types and clean timestamp duplicates
     df = df.copy()
-    df['timestamp'] = pd.to_numeric(df['timestamp'], errors='coerce')
-    df = df.dropna(subset=['timestamp'])
+    df[target_col] = pd.to_numeric(df[target_col], errors='coerce')
+    df = df.dropna(subset=[target_col])
     
     # Average values if two samples occur on the exact same nanosecond
-    df = df.groupby('timestamp').mean().reset_index()
+    df = df.groupby(target_col).mean().reset_index()
     
     # 2. Set timestamp as index for time-based operations
-    df = df.set_index('timestamp')
+    df = df.set_index(target_col)
     
     # 3. Create a "Perfect Grid"
     # Generates a sequence from start to end with a constant 2ms interval (500Hz)
@@ -185,6 +188,61 @@ def resample_and_interpolate_file(df, target_interval_ns=2_000_000):
     df_final = df_interpolated.loc[perfect_grid]
     
     return df_final.reset_index()
+
+
+def resample_and_interpolate_dataset(source_dir, output_base_dir, target_interval_ns=2_000_000):
+    """
+    Iterates through all CSV files in the source directory, applies resampling,
+    and saves the results into subdirectories organized by hand (Left/Right).
+    
+    Parameters:
+    - source_dir (str): Path where the raw sensor CSV files are located.
+    - output_base_dir (str): Root path for saving the resampled files.
+    - target_interval_ns (int): The fixed time grid interval (default 2ms = 500Hz).
+    """
+    
+    # 1. Find all CSV files in the source directory
+    file_pattern = [os.path.join(source_dir, "Left/*accel.csv"), os.path.join(source_dir, "Right/*accel.csv"), os.path.join(source_dir, "Left/*gyro.csv"), os.path.join(source_dir, "Right/*gyro.csv")]
+    all_files = []
+    for pattern in file_pattern:
+        all_files.extend(glob.glob(pattern, recursive=True))
+    
+    if not all_files:
+        print(f"No CSV files found in {source_dir}")
+        return
+
+    print(f"Found {len(all_files)} files. Starting resampling process...")
+
+    for file_path in all_files:
+        try:
+            # 2. Identify the hand (label) from the filename
+            filename = os.path.basename(file_path)
+            hand_label = "Left" if "left" in file_path.lower() else "Right"
+            
+            # 3. Create the output directory for the specific hand if it doesn't exist
+            # e.g., output_base_dir/Left/
+            save_dir = os.path.join(output_base_dir, hand_label)
+            os.makedirs(save_dir, exist_ok=True)
+            
+            # 4. Load the raw data
+            raw_df = pd.read_csv(file_path, header=None)
+            
+            # 5. Apply your resampling function
+            # Note: Ensure the resample_and_interpolate_file function is defined in your script
+            resampled_df = resample_and_interpolate_file(raw_df, target_interval_ns)
+            resampled_df.rename(columns={3: 'timestamp', 0: 'x', 1: 'y', 2: 'z'}, inplace=True)
+            
+            # 6. Save the resampled file with a prefix to indicate it's processed
+            save_path = os.path.join(save_dir, f"res_{filename}")
+            resampled_df.to_csv(save_path, index=False)
+            
+            print(f"Processed: {filename} -> {hand_label} folder")
+            
+        except Exception as e:
+            print(f"Error processing {file_path}: {e}")
+
+    print("\nResampling complete for all files.")
+
 
 
 def apply_butterworth_highpass(data, cutoff_hz, fs, order=4):
@@ -240,4 +298,4 @@ def apply_highpass_to_all_files(root_dir: str, save_dir: str):
                 df.to_csv(f'{save_dir}/{hand}/{file.split("/")[-1]}', index=False)
 
 # Start Processing
-apply_highpass_to_all_files(root_dir='Resampled', save_dir='Clean')
+# apply_highpass_to_all_files(root_dir='Resampled', save_dir='Clean')
