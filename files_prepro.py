@@ -284,18 +284,19 @@ def apply_highpass_to_all_files(root_dir: str, save_dir: str):
                 if file_type == 'accel':
                     cutoff = 0.6  # Optimal for gravity removal
                     order = 4
-                    cols_to_filter = ['accel_x', 'accel_y', 'accel_z'] 
+                    cols_to_filter = ['x', 'y', 'z'] 
                 else:
                     cutoff = 0.1  # Optimal for gyroscope bias drift cleaning
                     order = 2
-                    cols_to_filter = ['gyro_x', 'gyro_y', 'gyro_z']
+                    cols_to_filter = ['x', 'y', 'z']
                 
                 for col in cols_to_filter:
                         data_col = pd.to_numeric(df[col], errors='coerce').fillna(0)
                         df[col] = apply_butterworth_highpass(data_col, cutoff_hz=cutoff, fs=500, order=order)
                 
                 # Save processed data to the target directory
-                df.to_csv(f'{save_dir}/{hand}/{file.split("/")[-1]}', index=False)
+                os.makedirs(os.path.join(save_dir, hand), exist_ok=True)
+                df.to_csv(f'{save_dir}/{hand}/cl_{file.split("/")[-1]}', index=False)
 
 # Start Processing
 # apply_highpass_to_all_files(root_dir='Resampled', save_dir='Clean')

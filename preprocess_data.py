@@ -94,11 +94,33 @@ def main():
     # files_prepro.plot_sampling_rate_histograms(gyro_sampling_rates_list, save_path='New/Resampled/gyro_sampling_consistency_histograms.png')
 
     # Plot resampled data for each hand, file type, and axis
+    # for hand in ['Left', 'Right']:
+    #     for file_type in ['accel', 'gyro']:
+    #         for ax in ['x', 'y', 'z']:
+    #             analyze_data.plot_hand_data(f'New/Resampled/{hand}', file_type=file_type, axis=ax, raw=False, save_path=f'New/Resampled/{hand.lower()}_{file_type}_{ax}_res.png')
+    
+
+    # Clean the data
+    # files_prepro.apply_highpass_to_all_files(root_dir='New/Resampled', save_dir='New/Clean')
+
+    #     # Plot cleaned data for each hand, file type, and axis
+    # for hand in ['Left', 'Right']:
+    #     for file_type in ['accel', 'gyro']:
+    #         for ax in ['x', 'y', 'z']:
+    #             analyze_data.plot_hand_data(f'New/Clean/{hand}', file_type=file_type, axis=ax, raw=False, save_path=f'New/Clean/{hand.lower()}_{file_type}_{ax}_clean.png')
+
+
+    # Smooth the cleaned data
+    for hand in ['Left', 'Right']:
+        for file_type in ['accel', 'gyro']:
+            analyze_data.smooth_and_save_hand_data(hand_dir=f'New/Clean/{hand}', save_dir=f'New/Smoothed/{hand}', file_type=file_type, max_files=5)
+
+
+    # Plot smoothed data for each hand, file type, and axis
     for hand in ['Left', 'Right']:
         for file_type in ['accel', 'gyro']:
             for ax in ['x', 'y', 'z']:
-                analyze_data.plot_hand_data(f'New/Resampled/{hand}', file_type=file_type, axis=ax, raw=False, save_path=f'New/Resampled/{hand.lower()}_{file_type}_{ax}_res.png')
-
+                analyze_data.plot_hand_data(f'New/Smoothed/{hand}', file_type=file_type, axis=ax, raw=False, save_path=f'New/Smoothed/{hand.lower()}_{file_type}_{ax}_smoothed.png')
 
 if __name__ == "__main__":
     main()

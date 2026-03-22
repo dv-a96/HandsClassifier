@@ -402,18 +402,15 @@ def _compute_smoothing(df: pd.DataFrame, file_type: str, ma_window: int = 100, s
 
     prefix = "accel" if file_type == "accel" else "gyro"
     for axis in ["x", "y", "z"]:
-        col = f"{prefix}_{axis}"
-        if col not in df.columns:
-            continue
 
-        df[f"{col}_ma"] = df[col].rolling(window=ma_window, center=True).mean()
+        df[f"{axis}_ma"] = df[axis].rolling(window=ma_window, center=True).mean()
 
         # Savitzky-Golay smoothing (window must be odd)
         sg_window_adj = min(sg_window, len(df) // 2 * 2 - 1)
         if sg_window_adj < 3:
-            df[f"{col}_sg"] = df[col]
+            df[f"{axis}_sg"] = df[axis]
         else:
-            df[f"{col}_sg"] = savgol_filter(df[col].values, sg_window_adj, polyorder=2)
+            df[f"{axis}_sg"] = savgol_filter(df[axis].values, sg_window_adj, polyorder=2)
 
     return df
 
@@ -451,10 +448,10 @@ def plot_axis_data(file_path: str, axis: str, file_type: str, raw: bool = False,
         df["time_sec"] = df[time_col].cumsum() / 1e9
         filename = os.path.basename(file_path)
         if not raw:
-            if filename.startswith("res"):
+            if filename.startswith("res") or filename.startswith("cl"):
                 col_name = f"{axis}"
-            else:
-                col_name = f"{file_type}_{axis}"
+            elif filename.startswith("smoothed"):
+                col_name = f"{axis}_sg"
         else:
             axis_map = {'x': 0, 'y': 1, 'z': 2}
             col_name = df.columns[axis_map[axis]]
