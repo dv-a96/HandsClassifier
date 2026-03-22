@@ -468,7 +468,7 @@ def plot_axis_data(file_path: str, axis: str, file_type: str, raw: bool = False,
             fig = ax.get_figure()
 
         ax.plot(df["time_sec"], df[col_name], color='blue', label=f'{axis.upper()}-axis', linewidth=1)
-        ax.set_xlabel('Time (seconds)')
+        ax.set_xlabel('Time (ns)')
         ylabel = 'Acceleration(m/s^2)' if file_type == 'accel' else 'Angular Velocity(rad/s)'
         ax.set_ylabel(ylabel)
         ax.set_title(f"{os.path.basename(file_path)}", loc='left', fontsize=10)
