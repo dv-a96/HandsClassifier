@@ -757,20 +757,19 @@ def create_stats_dfs(root_dir: str, save_dir: str) -> None:
         for pattern in ["**/*accel.csv", "**/*gyro.csv"]:
             data = []
             files = sorted(glob.glob(os.path.join(hand_dir, pattern), recursive=True))
-            if root_dir == 'Smoothed':
-                axes = ['x_sg', 'y_sg', 'z_sg']
-            else:
-                axes = ['x', 'y', 'z']
             for fpath in files:
                 try:
                     df = pd.read_csv(fpath)
                     filename = os.path.basename(fpath)
                     file_type = 'accel' if 'accel' in filename else 'gyro'
+                    if 'smoothed' in filename:
+                        axes = ['x_sg', 'y_sg', 'z_sg']
+                    else:
+                        axes = ['x', 'y', 'z']
                     
                     for axis in axes:
-                        col = f"{file_type}_{axis}"
-                        if col in df.columns:
-                            series = df[col]
+                        if axis in df.columns:
+                            series = df[axis]
                             row = {'filename': filename, 'axis': axis}
                             for stat in stats_list:
                                 if stat == 'mean':
@@ -808,6 +807,7 @@ def create_stats_dfs(root_dir: str, save_dir: str) -> None:
             if data:
                 stats_df = pd.DataFrame(data)
                 out_path = os.path.join(save_dir, f"{hand.lower()}_{file_type}_stats.csv")
+                os.makedirs(save_dir, exist_ok=True)
                 stats_df.to_csv(out_path, index=False)
                 print(f"Stats DF saved to: {out_path}")
 
@@ -1099,10 +1099,10 @@ def walk_and_analyze(root_dirs):
 
 def main():
 
-    create_stats_dfs('Smoothed', 'Smoothed/Stats')
-    create_global_summary('Smoothed/Stats', 'Smoothed/global_summery.csv')
-    plot_comprehensive_hand_comparison(pd.read_csv('Smoothed/global_summery.csv'), 'gyro', 'Smoothed/gyro_stats_summery.png')
-    plot_comprehensive_hand_comparison(pd.read_csv('Smoothed/global_summery.csv'), 'accel', 'Smoothed/accel_stats_summery.png')    
+    create_stats_dfs('New/Smoothed', 'New/Stats')
+    create_global_summary('New/Stats', 'New/global_summery.csv')
+    plot_comprehensive_hand_comparison(pd.read_csv('New/global_summery.csv'), 'gyro', 'New/gyro_stats_summery.png')
+    plot_comprehensive_hand_comparison(pd.read_csv('New/global_summery.csv'), 'accel', 'New/accel_stats_summery.png')    
     # for hand in ['Left', 'Right']:
     #     for file_type in ['accel', 'gyro']:
     #         for stat in ['mean', 'std', 'variance', 'min', 'max', 'median', 'delta_min_max', 'count_negative', 'count_positive']:
@@ -1124,5 +1124,5 @@ def main():
     #         for axis in ['x', 'y', 'z']:
     #             plot_stats_outliers(f'Smoothed/Stats/{hand.lower()}_{file_type}_stats.csv', f'{axis}_sg', f'Smoothed/{hand.lower()}_{file_type}_{axis}_sg_outliers.png')
 
-# if __name__ == "__main__":
-#     main()
+if __name__ == "__main__":
+    main()

@@ -120,7 +120,7 @@ def main():
     for hand in ['Left', 'Right']:
         for file_type in ['accel', 'gyro']:
             for ax in ['x', 'y', 'z']:
-                analyze_data.plot_hand_data(f'New/Smoothed/{hand}', file_type=file_type, axis=ax, raw=False, save_path=f'New/Smoothed/{hand.lower()}_{file_type}_{ax}_smoothed.png')
+                analyze_data.plot_hand_data(f'New/Smoothed/{hand}', file_type=file_type,max_files=5, axis=ax, raw=False, save_path=f'New/Smoothed/{hand.lower()}_{file_type}_{ax}_smoothed.png')
 
 if __name__ == "__main__":
     main()
