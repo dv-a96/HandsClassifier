@@ -504,6 +504,7 @@ def plot_hand_data(hand_dir: str, axis: str, file_type: str, max_files: int = 5,
     
     if save_path:
         fig.savefig(save_path, dpi=150, bbox_inches='tight')
+        plt.close(fig)  # Close the figure to free memory
         print(f"Combined plot saved as '{save_path}'")
         
     return fig
