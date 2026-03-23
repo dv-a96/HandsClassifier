@@ -167,4 +167,6 @@ def smart_feature_selection(df, target_col='label', threshold=0.95):
 df = load_feture_matrix('New/Stats', save_path='New/full_features.csv')
 cor_matrix = plot_feature_correlation(df)
 top_features = get_top_correlations_with_target(cor_matrix)
-selected_df = smart_feature_selection(df, target_col='label', threshold=0.95)
+selected_df = smart_feature_selection(df, target_col='label', threshold=0.80)
+selected_df.to_csv('New/selected_features.csv', index=False)
+print(selected_df['label'].value_counts())
