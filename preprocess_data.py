@@ -72,42 +72,42 @@ def preprocess_data(df: pd.DataFrame) -> pd.DataFrame:
 def main():
     raw_data_path = 'New/Raw'
 
-    # Plot raw data for each hand, file type, and axis
-    for hand in ['Left', 'Right']:
-        for file_type in ['accel', 'gyro']:
-            for ax in ['x', 'y', 'z']:
-                analyze_data.plot_hand_data(f'{raw_data_path}/{hand}', file_type=file_type, axis=ax, raw=True, save_path=f'{raw_data_path}/{hand.lower()}_{file_type}_{ax}_raw.png')
+    # # Plot raw data for each hand, file type, and axis
+    # for hand in ['Left', 'Right']:
+    #     for file_type in ['accel', 'gyro']:
+    #         for ax in ['x', 'y', 'z']:
+    #             analyze_data.plot_hand_data(f'{raw_data_path}/{hand}', file_type=file_type, axis=ax, raw=True, save_path=f'{raw_data_path}/{hand.lower()}_{file_type}_{ax}_raw.png')
     
-    # Check raw data sample rate
-    accel_sampling_rates_list = files_prepro.add_timestamp_diff_column(raw_data_path, 'accel')
-    gyro_sampling_rates_list = files_prepro.add_timestamp_diff_column(raw_data_path, 'gyro')
-    files_prepro.plot_sampling_rate_histograms(accel_sampling_rates_list, save_path='New/Raw/accel_sampling_consistency_histograms.png')
-    files_prepro.plot_sampling_rate_histograms(gyro_sampling_rates_list, save_path='New/Raw/gyro_sampling_consistency_histograms.png')
+    # # Check raw data sample rate
+    # accel_sampling_rates_list = files_prepro.add_timestamp_diff_column(raw_data_path, 'accel')
+    # gyro_sampling_rates_list = files_prepro.add_timestamp_diff_column(raw_data_path, 'gyro')
+    # files_prepro.plot_sampling_rate_histograms(accel_sampling_rates_list, save_path='New/Raw/accel_sampling_consistency_histograms.png')
+    # files_prepro.plot_sampling_rate_histograms(gyro_sampling_rates_list, save_path='New/Raw/gyro_sampling_consistency_histograms.png')
 
-    # Resample data to a consistent rate and save to new CSV files
-    files_prepro.resample_and_interpolate_dataset(source_dir=raw_data_path, output_base_dir='New/Resampled/', target_interval_ns=2000000) # 500Hz target rate corresponds to 2ms interval
+    # # Resample data to a consistent rate and save to new CSV files
+    # files_prepro.resample_and_interpolate_dataset(source_dir=raw_data_path, output_base_dir='New/Resampled/', target_interval_ns=2000000) # 500Hz target rate corresponds to 2ms interval
         
-    # Verify resampled data sample rate consistency
-    accel_sampling_rates_list = files_prepro.add_timestamp_diff_column('New/Resampled/', 'accel')
-    gyro_sampling_rates_list = files_prepro.add_timestamp_diff_column('New/Resampled/', 'gyro')
-    files_prepro.plot_sampling_rate_histograms(accel_sampling_rates_list, save_path='New/Resampled/accel_sampling_consistency_histograms.png')
-    files_prepro.plot_sampling_rate_histograms(gyro_sampling_rates_list, save_path='New/Resampled/gyro_sampling_consistency_histograms.png')
+    # # Verify resampled data sample rate consistency
+    # accel_sampling_rates_list = files_prepro.add_timestamp_diff_column('New/Resampled/', 'accel')
+    # gyro_sampling_rates_list = files_prepro.add_timestamp_diff_column('New/Resampled/', 'gyro')
+    # files_prepro.plot_sampling_rate_histograms(accel_sampling_rates_list, save_path='New/Resampled/accel_sampling_consistency_histograms.png')
+    # files_prepro.plot_sampling_rate_histograms(gyro_sampling_rates_list, save_path='New/Resampled/gyro_sampling_consistency_histograms.png')
 
-    # Plot resampled data for each hand, file type, and axis
-    for hand in ['Left', 'Right']:
-        for file_type in ['accel', 'gyro']:
-            for ax in ['x', 'y', 'z']:
-                analyze_data.plot_hand_data(f'New/Resampled/{hand}', file_type=file_type, axis=ax, raw=False, save_path=f'New/Resampled/{hand.lower()}_{file_type}_{ax}_res.png')
+    # # Plot resampled data for each hand, file type, and axis
+    # for hand in ['Left', 'Right']:
+    #     for file_type in ['accel', 'gyro']:
+    #         for ax in ['x', 'y', 'z']:
+    #             analyze_data.plot_hand_data(f'New/Resampled/{hand}', file_type=file_type, axis=ax, raw=False, save_path=f'New/Resampled/{hand.lower()}_{file_type}_{ax}_res.png')
     
 
-    # Clean the data
-    files_prepro.apply_highpass_to_all_files(root_dir='New/Resampled', save_dir='New/Clean')
+    # # Clean the data
+    # files_prepro.apply_highpass_to_all_files(root_dir='New/Resampled', save_dir='New/Clean')
 
-    # Plot cleaned data for each hand, file type, and axis
-    for hand in ['Left', 'Right']:
-        for file_type in ['accel', 'gyro']:
-            for ax in ['x', 'y', 'z']:
-                analyze_data.plot_hand_data(f'New/Clean/{hand}', file_type=file_type, axis=ax, raw=False, save_path=f'New/Clean/{hand.lower()}_{file_type}_{ax}_clean.png')
+    # # Plot cleaned data for each hand, file type, and axis
+    # for hand in ['Left', 'Right']:
+    #     for file_type in ['accel', 'gyro']:
+    #         for ax in ['x', 'y', 'z']:
+    #             analyze_data.plot_hand_data(f'New/Clean/{hand}', file_type=file_type, axis=ax, raw=False, save_path=f'New/Clean/{hand.lower()}_{file_type}_{ax}_clean.png')
 
 
     # Smooth the cleaned data

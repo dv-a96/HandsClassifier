@@ -650,7 +650,7 @@ def plot_hand_stats_bars(hand_dir: str, file_type: str, stat_name: str, max_file
     
     # 1. Define and validate supported statistics
     supported_stats = [
-        'mean', 'std', 'variance', 'min', 'max', 'median',
+        'mean', 'variance', 'min', 'max', 'median',
         'delta_min_max', 'count_negative', 'count_positive', 'intensity', 'skewness',
         'argmax', 'argmin', 'zcr'
     ]
@@ -688,7 +688,6 @@ def plot_hand_stats_bars(hand_dir: str, file_type: str, stat_name: str, max_file
                     
                     # Logic for calculating the specific statistic
                     if stat_name == 'mean': val = series.mean()
-                    elif stat_name == 'std': val = series.std()
                     elif stat_name == 'variance': val = series.var()
                     elif stat_name == 'min': val = series.min()
                     elif stat_name == 'max': val = series.max()
@@ -746,7 +745,7 @@ def create_stats_dfs(root_dir: str, save_dir: str) -> None:
     Each DF contains: filename, axis, mean, std, variance, min, max, median, delta_min_max, count_negative, count_positive
     Saves as left_stats.csv and right_stats.csv in save_dir.
     """
-    stats_list = ['mean', 'std', 'variance', 'min', 'max', 'median', 'delta_min_max', 'count_negative', 'count_positive', 'intensity', 'skewness',
+    stats_list = ['mean', 'variance', 'min', 'max', 'median', 'delta_min_max', 'count_negative', 'count_positive', 'intensity', 'skewness',
                   'argmax', 'argmin', 'zcr']
     
     for hand in ['Left', 'Right']:
@@ -774,8 +773,6 @@ def create_stats_dfs(root_dir: str, save_dir: str) -> None:
                             for stat in stats_list:
                                 if stat == 'mean':
                                     row[stat] = series.mean()
-                                elif stat == 'std':
-                                    row[stat] = series.std()
                                 elif stat == 'variance':
                                     row[stat] = series.var()
                                 elif stat == 'min':
@@ -827,7 +824,7 @@ def plot_stats_outliers(stats_csv_path, axis_name='z_sg', save_path=None):
         return
 
     # List of metrics to evaluate for outliers
-    metrics = ['mean', 'std', 'variance', 'min', 'max', 'median', 'delta_min_max', 'count_negative', 'count_positive', 'intensity', 'skewness',
+    metrics = ['mean', 'variance', 'min', 'max', 'median', 'delta_min_max', 'count_negative', 'count_positive', 'intensity', 'skewness',
                'argmax', 'argmin', 'zcr']
     cols = 3
     rows = (len(metrics) + cols - 1) // cols

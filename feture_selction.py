@@ -7,7 +7,7 @@ def reshape_sensor_data(df):
     Combine features from all axes (x, y, z) into a single row per file.
     """
     # Define the statistical metrics to be extracted
-    stats_cols = ['mean', 'std', 'variance', 'min', 'max', 'median', 
+    stats_cols = ['mean', 'variance', 'min', 'max', 'median', 
                   'delta_min_max', 'count_negative', 'count_positive', 'intensity', 'skewness',
                   'argmax', 'argmin', 'zcr']
     
@@ -164,7 +164,7 @@ def smart_feature_selection(df, target_col='label', threshold=0.95):
     print(f"Final feature count: {final_df.shape[1] - 2}") # Subtracting label and filename
     
     return final_df
-df = load_feture_matrix('Smoothed/Stats', save_path='Smoothed/full_features.csv')
+df = load_feture_matrix('New/Stats', save_path='New/full_features.csv')
 cor_matrix = plot_feature_correlation(df)
 top_features = get_top_correlations_with_target(cor_matrix)
 selected_df = smart_feature_selection(df, target_col='label', threshold=0.95)
