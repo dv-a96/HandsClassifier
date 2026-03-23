@@ -445,7 +445,7 @@ def plot_axis_data(file_path: str, axis: str, file_type: str, raw: bool = False,
         df = _load_sensor_csv(file_path, header=0 if not raw else None)
         # המרת זמן - לוגיקה מאוחדת
         time_col = "timestamp" if not raw else df.columns[-1]
-        df["time_sec"] = df[time_col].cumsum() / 1e9
+        df["time_sec"] = (df[time_col] - df[time_col].iloc[0]) / 1e9
         filename = os.path.basename(file_path)
         if not raw:
             if filename.startswith("res") or filename.startswith("cl"):
@@ -468,7 +468,7 @@ def plot_axis_data(file_path: str, axis: str, file_type: str, raw: bool = False,
             fig = ax.get_figure()
 
         ax.plot(df["time_sec"], df[col_name], color='blue', label=f'{axis.upper()}-axis', linewidth=1)
-        ax.set_xlabel('Time (ns)')
+        ax.set_xlabel('Time (seconds)')
         ylabel = 'Acceleration(m/s^2)' if file_type == 'accel' else 'Angular Velocity(rad/s)'
         ax.set_ylabel(ylabel)
         ax.set_title(f"{os.path.basename(file_path)}", loc='left', fontsize=10)
@@ -1124,5 +1124,5 @@ def main():
     #         for axis in ['x', 'y', 'z']:
     #             plot_stats_outliers(f'Smoothed/Stats/{hand.lower()}_{file_type}_stats.csv', f'{axis}_sg', f'Smoothed/{hand.lower()}_{file_type}_{axis}_sg_outliers.png')
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     main()
