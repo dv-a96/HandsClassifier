@@ -439,7 +439,7 @@ def smooth_and_save_hand_data(hand_dir: str, save_dir: str, file_type: str, max_
         print(f"Smoothed data saved to: {out_path}")
 
 
-def plot_axis_data(file_path: str, axis: str, file_type: str, raw: bool = False, save_path: str = None, ax=None) -> plt.Figure:
+def plot_axis_data(file_path: str, axis: str, file_type: str, raw: bool = False, save_path: str = None, ax=None, y_limit: tuple = None) -> plt.Figure:
     """Plot the axis data of a given file on a specific axis or a new figure."""
     try:
         df = _load_sensor_csv(file_path, header=0 if not raw else None)
@@ -471,10 +471,12 @@ def plot_axis_data(file_path: str, axis: str, file_type: str, raw: bool = False,
         ax.set_xlabel('Time (seconds)')
         ylabel = 'Acceleration(m/s^2)' if file_type == 'accel' else 'Angular Velocity(rad/s)'
         ax.set_ylabel(ylabel)
+
         ax.set_title(f"{os.path.basename(file_path)}", loc='left', fontsize=10)
         ax.legend()
         ax.grid(True, alpha=0.3)
-
+        if y_limit:
+            ax.set_ylim(y_limit)
         if save_path and fig:
             fig.savefig(save_path, dpi=150, bbox_inches='tight')
             
@@ -494,10 +496,33 @@ def plot_hand_data(hand_dir: str, axis: str, file_type: str, max_files: int = 5,
 
     # יצירת הקנבס עם מספר subplots כמספר הקבצים
     fig, axes = plt.subplots(len(files), 1, figsize=(14, 4 * len(files)), squeeze=False)
+    # Find y-axis limits based on all files from the same type axis and hand
+    y_lim = None
+    for fpath in files:
+        try:
+            df = _load_sensor_csv(fpath, header=0 if not raw else None)
+            axis_map = {'x': 0, 'y': 1, 'z': 2}
+            filename = os.path.basename(fpath)
+            col_name = f"{axis}_sg" if "smoothed" in filename else df.columns[axis_map[axis]] 
+            if col_name in df.columns:
+                current_min = df[col_name].min()
+                current_max = df[col_name].max()
+                if y_lim is None:
+                    y_lim = (current_min, current_max)
+                else:
+                    y_lim = (min(y_lim[0], current_min), max(y_lim[1], current_max))
+        except Exception as e:
+            print(f"Error determining y-limits from {fpath}: {e}")
+            continue
     
+    low, high = y_lim
+    # Add some padding
+    y_lim = (low - abs(low) * 0.5, high + abs(high) * 0.5)
+    y_lim = (low, high) 
+
     for i, fpath in enumerate(files):
         # קריאה לפונקציה המקורית ושליחת ה-AX הספציפי
-        plot_axis_data(file_path=fpath, axis=axis, file_type=file_type, raw=raw, ax=axes[i, 0])
+        plot_axis_data(file_path=fpath, axis=axis, file_type=file_type, raw=raw, ax=axes[i, 0], y_limit=y_lim)
 
     fig.suptitle(f'Hand: {os.path.basename(hand_dir).upper()} | Axis: {axis.upper()} | Mode: {file_type.upper()}', fontsize=16)
     fig.tight_layout(rect=[0, 0.03, 1, 0.95])
@@ -509,6 +534,74 @@ def plot_hand_data(hand_dir: str, axis: str, file_type: str, max_files: int = 5,
         
     return fig
 
+def plot_axis_pattern_pic(file_path: str, axis: str, file_type: str, max_files: int = 5, raw: bool = False, save_path: str = None, ax=None) -> plt.Figure:
+    try:
+        df = _load_sensor_csv(file_path, header=0 if not raw else None)
+        filename = os.path.basename(file_path)
+        if not raw:
+            if filename.startswith("res") or filename.startswith("cl"):
+                col_name = f"{axis}"
+            elif filename.startswith("smoothed"):
+                col_name = f"{axis}_sg"
+        else:
+            axis_map = {'x': 0, 'y': 1, 'z': 2}
+            col_name = df.columns[axis_map[axis]]
+
+        if col_name not in df.columns:
+            print(f"Column {col_name} not found in {file_path}")
+            return None
+
+        # אם לא קיבלנו AX, ניצור figure חדש
+        fig = None
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(12, 6))
+        else:
+            fig = ax.get_figure()
+        df["diff"] = df[col_name].diff().fillna(0)
+        ax.plot(df["diff"].iloc[:100], df[col_name].iloc[:100],'o', color='blue', label=f'{axis.upper()}-axis', markersize=2)
+        ax.set_xlabel(f'{col_name} Difference')
+        ylabel = col_name
+        ax.set_ylabel(ylabel)
+
+        ax.set_title(f"{os.path.basename(file_path)}", loc='left', fontsize=10)
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        if save_path and fig:
+            fig.savefig(save_path, dpi=150, bbox_inches='tight')
+            
+        return fig
+    except Exception as e:
+        print(f"Error in plot_axis_data: {e}")
+        return None
+    
+
+
+def plot_hand_pattern_pic(hand_dir: str, axis: str, file_type: str, max_files: int = 5, raw: bool = False, save_path: str = None) -> plt.Figure:
+    pattern = f"**/*{file_type}.csv"
+    files = sorted(glob.glob(os.path.join(hand_dir, pattern), recursive=True))[:max_files]
+    
+    if not files:
+        print(f"No {file_type} files found in {hand_dir}")
+        return None
+
+    # יצירת הקנבס עם מספר subplots כמספר הקבצים
+    fig, axes = plt.subplots(len(files), 1, figsize=(14, 4 * len(files)), squeeze=False)
+    # Find y-axis limits based on all files from the same type axis and hand
+
+    for i, fpath in enumerate(files):
+        # קריאה לפונקציה המקורית ושליחת ה-AX הספציפי
+        plot_axis_pattern_pic(file_path=fpath, axis=axis, file_type=file_type, raw=raw, ax=axes[i, 0])
+
+    fig.suptitle(f'Hand: {os.path.basename(hand_dir).upper()} | Axis: {axis.upper()} | Mode: {file_type.upper()}', fontsize=16)
+    fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+    
+    if save_path:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        fig.savefig(save_path, dpi=150, bbox_inches='tight')
+        plt.close(fig)  # Close the figure to free memory
+        print(f"Combined plot saved as '{save_path}'")
+        
+    return fig
 
 def plot_hand_axis_raw(hand_dir:str, axis: str, file_type: str, max_files: int = 5, raw: str = False, save_path: str = None) -> plt.Figure:
     """Plot raw data for a specific hand and axis across multiple files. Plot with dual smoothing layers:
@@ -886,56 +979,43 @@ def plot_stats_outliers(stats_csv_path, axis_name='z_sg', save_path=None):
         plt.show()
 
 def create_global_summary(stats_dir: str, out_path: str = None) -> pd.DataFrame:
-    """
-    Aggregates individual statistics files into a single global summary table.
-    Categorizes data by Hand (Left/Right), Sensor (Accel/Gyro), and Axis.
-    """
     all_data = []
-    # Find all individual stats CSV files
     files = glob.glob(os.path.join(stats_dir, "*_stats.csv"))
     
     for fpath in files:
         df = pd.read_csv(fpath)
         filename = os.path.basename(fpath)
-        # Parse metadata (hand side and sensor type) from the filename
         parts = filename.split('_')
+        
         df['hand'] = parts[0].capitalize()
-        df['sensor'] = parts[1].capitalize()
+        
+        # זיהוי סנסור - הוספנו תמיכה בקבצי correlation
+        if 'accel' in filename:
+            df['sensor'] = 'Accel'
+        elif 'gyro' in filename or 'correlation' in filename:
+            df['sensor'] = 'Gyro'
+        else:
+            df['sensor'] = 'Unknown'
+            
         all_data.append(df)
     
     if not all_data:
-        print("No statistics files found to summarize.")
         return None
 
-    # Merge all individual dataframes into one large master dataframe
     master_df = pd.concat(all_data, ignore_index=True)
-
-    # 1. Define groups and target columns for aggregation
     group_cols = ['hand', 'sensor', 'axis']
-    # Select all numeric columns for calculation, excluding grouping and filename columns
+    
+    # הפונקציה תמצא אוטומטית את העמודות החדשות (gyro_accel_corr וכו') ותעשה להן ממוצע
     stat_cols = [c for c in master_df.columns if c not in group_cols + ['filename']]
-
-    # 2. Map metrics using an aggregation dictionary
-    # This ensures safe calculation of Mean and Std for every feature
     agg_dict = {col: ['mean', 'std'] for col in stat_cols}
     
-    # 3. Execute Groupby and Aggregate
-    # Groups data by Hand, Sensor, and Axis to find general patterns
     summary = master_df.groupby(group_cols).agg(agg_dict)
-
-    # 4. Flatten MultiIndex column names for cleaner CSV output
-    # Example: ('intensity', 'mean') becomes 'intensity_avg'
     summary.columns = [f"{col[0]}_{'avg' if col[1]=='mean' else 'std_dev'}" for col in summary.columns]
     summary = summary.reset_index()
 
     if out_path:
-        # Ensure the output directory exists and save the final summary
-        os.makedirs(os.path.dirname(out_path), exist_ok=True)
         summary.to_csv(out_path, index=False)
-        print(f"Global summary successfully saved to: {out_path}")
-        
     return summary
-
 
 def plot_hand_summery_comparison(summary_df: pd.DataFrame, sensor_type: str, metric: str, save_path: str=None):
     """
@@ -1100,7 +1180,8 @@ def main():
     create_stats_dfs('New/Smoothed', 'New/Stats')
     create_global_summary('New/Stats', 'New/global_summery.csv')
     plot_comprehensive_hand_comparison(pd.read_csv('New/global_summery.csv'), 'gyro', 'New/gyro_stats_summery.png')
-    plot_comprehensive_hand_comparison(pd.read_csv('New/global_summery.csv'), 'accel', 'New/accel_stats_summery.png')    
+    plot_comprehensive_hand_comparison(pd.read_csv('New/global_summery.csv'), 'accel', 'New/accel_stats_summery.png') 
+  
     # for hand in ['Left', 'Right']:
     #     for file_type in ['accel', 'gyro']:
     #         for stat in ['mean', 'std', 'variance', 'min', 'max', 'median', 'delta_min_max', 'count_negative', 'count_positive']:
@@ -1122,5 +1203,5 @@ def main():
     #         for axis in ['x', 'y', 'z']:
     #             plot_stats_outliers(f'Smoothed/Stats/{hand.lower()}_{file_type}_stats.csv', f'{axis}_sg', f'Smoothed/{hand.lower()}_{file_type}_{axis}_sg_outliers.png')
 
-# if __name__ == "__main__":
-#     main()
+if __name__ == "__main__":
+    main()

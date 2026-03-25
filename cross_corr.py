@@ -111,25 +111,55 @@ plt.show()
 
 left_pairs = get_paired_files('New/Smoothed/Left')
 right_pairs = get_paired_files('New/Smoothed/Right')
+# בתוך cross_corr.py - בסוף הקובץ
+all_correlation_data = []
 
-print("-"*20,"Left ", "-"*20)
-for base_name, paths in left_pairs.items():
-    accel_path = paths['accel']
-    gyro_path = paths['gyro']
-    accel_df = pd.read_csv(accel_path)
-    gyro_df = pd.read_csv(gyro_path)
-    features = extract_correlation_features(gyro_df, accel_df, left_template, right_template, target_length=750)
-    print(f"Features for {base_name}:")
-    print(f"\tCorrelation with Right Template: {features['corr_with_right_template']}")
-    print(f"\tCorrelation with Left Template: {features['corr_with_left_template']}")
+# עיבוד כל הזוגות (Left ו-Right)
+for hand, pairs in [('Left', left_pairs), ('Right', right_pairs)]:
+    for base_name, paths in pairs.items():
+        accel_df = pd.read_csv(paths['accel'])
+        gyro_df = pd.read_csv(paths['gyro'])
+        
+        # חילוץ הפיצ'רים
+        features = extract_correlation_features(gyro_df, accel_df, left_template, right_template, target_length=750)
+        
+        # הוספת מזהים לאיחוד
+        features['filename_clean'] = base_name + '.csv'
+        features['label_from_corr'] = hand
+        all_correlation_data.append(features)
 
-print("-"*20,"Right ", "-"*20)
-for base_name, paths in right_pairs.items():
-    accel_path = paths['accel']
-    gyro_path = paths['gyro']
-    accel_df = pd.read_csv(accel_path)
-    gyro_df = pd.read_csv(gyro_path)
-    features = extract_correlation_features(gyro_df, accel_df, left_template, right_template, target_length=750)
-    print(f"Features for {base_name}:")
-    print(f"\tCorrelation with Right Template: {features['corr_with_right_template']}")
-    print(f"\tCorrelation with Left Template: {features['corr_with_left_template']}")
+# בתוך cross_corr.py
+
+def save_correlation_stats(left_pairs, right_pairs, left_template, right_template, save_dir):
+    os.makedirs(save_dir, exist_ok=True)
+    
+    for hand, pairs in [('left', left_pairs), ('right', right_pairs)]:
+        data = []
+        for base_name, paths in pairs.items():
+            accel_df = pd.read_csv(paths['accel'])
+            gyro_df = pd.read_csv(paths['gyro'])
+            
+            # חילוץ הפיצ'רים
+            features = extract_correlation_features(gyro_df, accel_df, left_template, right_template, target_length=750)
+            
+            # הפיכת המילון לשורה בטבלה עם פורמט מתאים ל-Summary
+            row = {
+                'filename': base_name,
+                'axis': 'sync', # ציר דמיוני לצורך הקיבוץ בגרף
+                **features
+            }
+            data.append(row)
+        
+        # שמירה כקובץ stats לכל דבר
+        df = pd.DataFrame(data)
+        out_path = os.path.join(save_dir, f"{hand}_correlation_stats.csv")
+        df.to_csv(out_path, index=False)
+        print(f"Saved correlation stats to: {out_path}")
+
+# קריאה לפונקציה בסוף הקובץ
+save_correlation_stats(left_pairs, right_pairs, left_template, right_template, 'New/Stats')
+
+# שמירה לקובץ ביניים
+corr_df = pd.DataFrame(all_correlation_data)
+corr_df.to_csv('New/correlation_features.csv', index=False)
+print("Correlation features saved to New/correlation_features.csv")
