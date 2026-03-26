@@ -14,8 +14,8 @@ def train_hand_classifier(features_path):
     df = pd.read_csv(features_path)
     
     # Remove identification columns that should not be used as features for the model
-    X = df.drop(columns=['label_accel', 'label_gyro', 'filename_clean', 'filename_accel', 'filename_gyro'], errors='ignore')
-    y = df['label_accel']
+    X = df.drop(columns=['label_accel', 'label_gyro', 'label', 'filename_clean', 'filename_accel', 'filename_gyro'], errors='ignore')
+    y = df['label']
     
     # 2. Encode the Target (e.g., 'Left'/'Right' -> 0/1)
     le = LabelEncoder()
@@ -35,9 +35,12 @@ def train_hand_classifier(features_path):
     
     # 5. Model Evaluation
     y_pred = rf_model.predict(X_test)
-    
+    print(f"DEBUG: type(y_test) = {type(y_test)}, shape = {getattr(y_test, 'shape', 'no shape')}")
+    print(f"DEBUG: type(y_pred) = {type(y_pred)}, shape = {getattr(y_pred, 'shape', 'no shape')}")
+    print(f"DEBUG: target_names = {le.classes_}")
+        
     print("--- Classification Report ---")
-    print(classification_report(y_test, y_pred, target_names=le.classes_))
+    print(classification_report(y_test, y_pred, target_names=le.classes_.astype(str)))
     
     # Display the Confusion Matrix
     # Helps visualize where the model confuses 'Left' with 'Right'
@@ -63,3 +66,4 @@ def train_hand_classifier(features_path):
     
     return rf_model, le
 
+train_hand_classifier('New/selected_features.csv')

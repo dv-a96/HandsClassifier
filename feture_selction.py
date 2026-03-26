@@ -47,7 +47,7 @@ def create_full_feature_matrix(accel_stats_df, gyro_stats_df):
     
     return final_df
 
-def load_feture_matrix(features_path, save_path=None):
+def load_feture_matrix(features_path, corr_features_path, save_path=None):
     """Load the different sensors and axes features from the CSV files."""
 
     left_accel_df = pd.read_csv(f"{features_path}/left_accel_stats.csv")
@@ -64,11 +64,18 @@ def load_feture_matrix(features_path, save_path=None):
     left_features = create_full_feature_matrix(left_accel_df, left_gyro_df)
     right_features = create_full_feature_matrix(right_accel_df, right_gyro_df)
 
+    # Load correlation features
+    corr_df = pd.read_csv(corr_features_path)
+    
+
     # Combine Left and Right hand features into a single DataFrame
-    full_features = pd.concat([left_features, right_features], ignore_index=True)
+    full_stats_df = pd.concat([left_features, right_features], ignore_index=True)
+
+    # Merge the correlation features into the full feature matrix based on filename
+    final_combined_df = pd.merge(full_stats_df, corr_df.drop(columns=['label_from_corr']), on='filename_clean', how='inner')
     if save_path:
-        full_features.to_csv(save_path, index=False)
-    return full_features
+        final_combined_df.to_csv(save_path, index=False)
+    return final_combined_df
 
 
 
@@ -161,12 +168,12 @@ def smart_feature_selection(df, target_col='label', threshold=0.95):
     
     print(f"Smart Selection Complete.")
     print(f"Removed {len(to_drop)} redundant features.")
-    print(f"Final feature count: {final_df.shape[1] - 2}") # Subtracting label and filename
+    print(f"Final feature count: {final_df.shape[1] - 6}") # Subtracting label and filename
     
     return final_df
-df = load_feture_matrix('New/Stats', save_path='New/full_features.csv')
+df = load_feture_matrix('New/Stats', corr_features_path='New/correlation_features.csv', save_path='New/full_features.csv')
 cor_matrix = plot_feature_correlation(df)
 top_features = get_top_correlations_with_target(cor_matrix)
-selected_df = smart_feature_selection(df, target_col='label', threshold=0.80)
+selected_df = smart_feature_selection(df, target_col='label', threshold=0.90)
 selected_df.to_csv('New/selected_features.csv', index=False)
 print(selected_df['label'].value_counts())
