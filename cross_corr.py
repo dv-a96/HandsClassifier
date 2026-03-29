@@ -105,50 +105,50 @@ def get_paired_files(directory):
     # מחזירים רק זוגות מלאים (שיש להם גם וגם)
     return {k: v for k, v in pairs.items() if v['accel'] and v['gyro']}
 
-left_gyro_list = [pd.read_csv(f'New/Smoothed/Left/{path}') for path in os.listdir('New/Smoothed/Left') if path.endswith('gyro.csv')]
-n_left = len(left_gyro_list)
-right_gyro_list = [pd.read_csv(f'New/Smoothed/Right/{path}') for path in os.listdir('New/Smoothed/Right') if path.endswith('gyro.csv')]
-n_right = len(right_gyro_list)
-left_accel_list = [pd.read_csv(f'New/Smoothed/Left/{path}') for path in os.listdir('New/Smoothed/Left') if path.endswith('accel.csv')]
-right_accel_list = [pd.read_csv(f'New/Smoothed/Right/{path}') for path in os.listdir('New/Smoothed/Right') if path.endswith('accel.csv')]
-left_template = create_template(left_gyro_list, axis='y_sg', target_length=750)
-right_template = create_template(right_gyro_list, axis='y_sg', target_length=750)
+# left_gyro_list = [pd.read_csv(f'New/Smoothed/Left/{path}') for path in os.listdir('New/Smoothed/Left') if path.endswith('gyro.csv')]
+# n_left = len(left_gyro_list)
+# right_gyro_list = [pd.read_csv(f'New/Smoothed/Right/{path}') for path in os.listdir('New/Smoothed/Right') if path.endswith('gyro.csv')]
+# n_right = len(right_gyro_list)
+# left_accel_list = [pd.read_csv(f'New/Smoothed/Left/{path}') for path in os.listdir('New/Smoothed/Left') if path.endswith('accel.csv')]
+# right_accel_list = [pd.read_csv(f'New/Smoothed/Right/{path}') for path in os.listdir('New/Smoothed/Right') if path.endswith('accel.csv')]
+# left_template = create_template(left_gyro_list, axis='y_sg', target_length=750)
+# right_template = create_template(right_gyro_list, axis='y_sg', target_length=750)
 
 
 
-# Plot right vs left template
-import matplotlib.pyplot as plt
-plt.figure(figsize=(10, 5))
-plt.plot(left_template, label='Left Template', color='blue')
-plt.plot(right_template, label='Right Template', color='orange')
-plt.title('Left vs Right Template Signals')
-plt.xlabel('Time (normalized)')
-plt.ylabel('Gyro Signal')
-plt.legend()
-plt.show()
+# # Plot right vs left template
+# import matplotlib.pyplot as plt
+# plt.figure(figsize=(10, 5))
+# plt.plot(left_template, label='Left Template', color='blue')
+# plt.plot(right_template, label='Right Template', color='orange')
+# plt.title('Left vs Right Template Signals')
+# plt.xlabel('Time (normalized)')
+# plt.ylabel('Gyro Signal')
+# plt.legend()
+# plt.show()
 
-left_pairs = get_paired_files('New/Smoothed/Left')
-right_pairs = get_paired_files('New/Smoothed/Right')
-# בתוך cross_corr.py - בסוף הקובץ
-all_correlation_data = []
+# left_pairs = get_paired_files('New/Smoothed/Left')
+# right_pairs = get_paired_files('New/Smoothed/Right')
+# # בתוך cross_corr.py - בסוף הקובץ
+# all_correlation_data = []
 
-# עיבוד כל הזוגות (Left ו-Right)
-for hand, pairs in [('Left', left_pairs), ('Right', right_pairs)]:
-    for base_name, paths in pairs.items():
-        accel_df = pd.read_csv(paths['accel'])
-        gyro_df = pd.read_csv(paths['gyro'])
+# # עיבוד כל הזוגות (Left ו-Right)
+# for hand, pairs in [('Left', left_pairs), ('Right', right_pairs)]:
+#     for base_name, paths in pairs.items():
+#         accel_df = pd.read_csv(paths['accel'])
+#         gyro_df = pd.read_csv(paths['gyro'])
         
-        # חילוץ הפיצ'רים
-        features = extract_correlation_features(gyro_df, accel_df, left_template, right_template, hand, n_left, n_right, target_length=750)
+#         # חילוץ הפיצ'רים
+#         features = extract_correlation_features(gyro_df, accel_df, left_template, right_template, hand, n_left, n_right, target_length=750)
         
-        # הוספת מזהים לאיחוד
-        features['filename_clean'] = base_name + '.csv'
-        features['label_from_corr'] = hand
-        all_correlation_data.append(features)
+#         # הוספת מזהים לאיחוד
+#         features['filename_clean'] = base_name + '.csv'
+#         features['label_from_corr'] = hand
+#         all_correlation_data.append(features)
 
 # בתוך cross_corr.py
 
-def save_correlation_stats(left_pairs, right_pairs, left_template, right_template, save_dir):
+def save_correlation_stats(left_pairs, right_pairs, left_template, right_template, n_left, n_right, save_dir):
     os.makedirs(save_dir, exist_ok=True)
     
     for hand, pairs in [('left', left_pairs), ('right', right_pairs)]:
@@ -174,13 +174,13 @@ def save_correlation_stats(left_pairs, right_pairs, left_template, right_templat
         df.to_csv(out_path, index=False)
         print(f"Saved correlation stats to: {out_path}")
 
-# קריאה לפונקציה בסוף הקובץ
-save_correlation_stats(left_pairs, right_pairs, left_template, right_template, 'New/Stats')
+# # קריאה לפונקציה בסוף הקובץ
+# save_correlation_stats(left_pairs, right_pairs, left_template, right_template, 'New/Stats')
 
-# שמירה לקובץ ביניים
-corr_df = pd.DataFrame(all_correlation_data)
-corr_df.to_csv('New/correlation_features.csv', index=False)
-print("Correlation features saved to New/correlation_features.csv")
+# # שמירה לקובץ ביניים
+# corr_df = pd.DataFrame(all_correlation_data)
+# corr_df.to_csv('New/correlation_features.csv', index=False)
+# print("Correlation features saved to New/correlation_features.csv")
 
 def run_permutation_test(left_pairs, right_pairs, n_permutations=100):
     # --- שלב 1: טעינת הנתונים לזיכרון (קורה רק פעם אחת) ---
@@ -338,10 +338,71 @@ def analyze_effect_size_permutation(perm_df: pd.DataFrame):
         
     return pd.DataFrame(summary), df_effect
 
-permute_data = run_permutation_test(left_pairs, right_pairs, n_permutations=10000)
-print(permute_data.head())
-print(permute_data.columns)
-print(f"Permutation test completed with {len(permute_data)} rows of data.")
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-p_value = analyze_effect_size_permutation(permute_data)
-print(p_value)
+def plot_permutation_d_dist(df_effect, summary_results, save_path=None):
+    """
+    מציגה את התפלגות ה-Effect Size של הפרמוטציות מול הערך המקורי
+    """
+    stat_cols = summary_results['feature'].tolist()
+    n_features = len(stat_cols)
+    
+    fig, axes = plt.subplots(n_features, 1, figsize=(12, 5 * n_features))
+    if n_features == 1: axes = [axes]
+    
+    for i, col in enumerate(stat_cols):
+        ax = axes[i]
+        
+        # 1. שליפת הנתונים
+        orig_d = df_effect[df_effect['type'] == 'original'][col].values[0]
+        perm_ds = df_effect[df_effect['type'] != 'original'][col]
+        p_val = summary_results.loc[summary_results['feature'] == col, 'p_value'].values[0]
+        interpretation = summary_results.loc[summary_results['feature'] == col, 'interpretation'].values[0]
+        
+        # 2. ציור התפלגות הפרמוטציות (The Null Hypothesis)
+        sns.kdeplot(perm_ds, fill=True, color="gray", alpha=0.3, ax=ax, label='Null Distribution (Shuffled)')
+        sns.rugplot(perm_ds, color="gray", alpha=0.5, ax=ax) # קווים קטנים לכל פרמוטציה
+        
+        # 3. סימון הערך המקורי
+        ax.axvline(orig_d, color='red', linestyle='--', linewidth=3, 
+                   label=f'Original d = {orig_d:.2f} (p={p_val:.3f})')
+        
+        # 4. הוספת אזורי ה"אפקט" לפי כהן (צבע רקע עדין)
+        ax.axvspan(-0.2, 0.2, color='green', alpha=0.05, label='Negligible Effect Zone')
+        
+        # 5. עיצוב
+        ax.set_title(f'Permutation Test for Cohen\'s d: {col.replace("_", " ").title()}', fontsize=15)
+        ax.set_xlabel('Cohen\'s d Value', fontsize=12)
+        ax.set_ylabel('Density', fontsize=12)
+        
+        # הוספת טקסט פרשנות
+        status = "SIGNIFICANT" if p_val < 0.05 else "NOT SIGNIFICANT"
+        ax.text(0.05, 0.95, f'Status: {status}\nEffect Size: {interpretation}', 
+                transform=ax.transAxes, verticalalignment='top', 
+                bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+        
+        ax.legend(loc='upper right')
+        ax.grid(axis='x', alpha=0.3)
+
+    plt.tight_layout()
+    if save_path:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path)
+        print(f"Permutation plot saved to: {save_path}")
+    else:
+        plt.show()
+
+# permute_data = run_permutation_test(left_pairs, right_pairs, n_permutations=10000)
+# print(permute_data.head())
+# print(permute_data.columns)
+# print(f"Permutation test completed with {len(permute_data)} rows of data.")
+
+# summary_results, df_effect = analyze_effect_size_permutation(permute_data)
+# summary_results.to_csv('New/permutation_summary.csv', index=False)
+# print("Permutation summary saved to New/permutation_summary.csv")
+# df_effect.to_csv('New/permutation_effect_sizes.csv', index=False) 
+# print("Permutation effect sizes saved to New/permutation_effect_sizes.csv")
+df_effect = pd.read_csv('New/permutation_effect_sizes.csv')
+summary_results = pd.read_csv('New/permutation_summary.csv')
+plot_permutation_d_dist(df_effect, summary_results, save_path='New/permutation_effect_size_distribution.png')
