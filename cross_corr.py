@@ -2,6 +2,9 @@ import numpy as np
 import pandas as pd
 from scipy.interpolate import interp1d
 import os
+import time
+import random
+from tqdm import tqdm
 
 def create_template(list_of_dfs, axis='y_sg', target_length=200):
     """
@@ -21,13 +24,16 @@ def create_template(list_of_dfs, axis='y_sg', target_length=200):
     return np.mean(resampled_signals, axis=0)
 
 
-def extract_correlation_features(df, accel_df, left_template, right_template, target_length=200):
+def extract_correlation_features(df, accel_df, left_template, right_template, hand, n_left, n_right, target_length=200):
     """Extracts correlation features from the given dataframe using the provided templates.
     Args:   df (pd.DataFrame): The input dataframe containing the gyro data.
             accel_df (pd.DataFrame): The dataframe containing the accelerometer data.
             left_template (np.array): The template signal for the left class.
             right_template (np.array): The template signal for the right class.
             target_length (int): The length to which signals will be resampled for correlation with the templates.
+            hand (str): The label for the hand ('Left' or 'Right') to be used in feature extraction.
+            n_left (int): The number of samples in the left class (used for template adjustment).
+            n_right (int): The number of samples in the right class (used for template adjustment
     Returns:
             dict: A dictionary containing the extracted correlation features:
                 - 'gyro_accel_corr': Correlation between gyro_y and accel_x.
@@ -58,6 +64,16 @@ def extract_correlation_features(df, accel_df, left_template, right_template, ta
 
     # Resample gyro_y to the target length for template correlation
     y_gyro_resampled = resample_signal(df['y_sg'].values, target_length)
+    
+  
+    if hand == 'Left':
+        left_template = left_template * n_left
+        left_template -= y_gyro_resampled
+        left_template /= (n_left-1)
+    elif hand == 'Right':
+        right_template = right_template * n_right
+        right_template -= y_gyro_resampled
+        right_template /= (n_right-1)
 
     # 3. Correlation with Right template
     features['corr_with_right_template'] = np.corrcoef(y_gyro_resampled, right_template)[0, 1]
@@ -90,7 +106,9 @@ def get_paired_files(directory):
     return {k: v for k, v in pairs.items() if v['accel'] and v['gyro']}
 
 left_gyro_list = [pd.read_csv(f'New/Smoothed/Left/{path}') for path in os.listdir('New/Smoothed/Left') if path.endswith('gyro.csv')]
+n_left = len(left_gyro_list)
 right_gyro_list = [pd.read_csv(f'New/Smoothed/Right/{path}') for path in os.listdir('New/Smoothed/Right') if path.endswith('gyro.csv')]
+n_right = len(right_gyro_list)
 left_accel_list = [pd.read_csv(f'New/Smoothed/Left/{path}') for path in os.listdir('New/Smoothed/Left') if path.endswith('accel.csv')]
 right_accel_list = [pd.read_csv(f'New/Smoothed/Right/{path}') for path in os.listdir('New/Smoothed/Right') if path.endswith('accel.csv')]
 left_template = create_template(left_gyro_list, axis='y_sg', target_length=750)
@@ -121,7 +139,7 @@ for hand, pairs in [('Left', left_pairs), ('Right', right_pairs)]:
         gyro_df = pd.read_csv(paths['gyro'])
         
         # חילוץ הפיצ'רים
-        features = extract_correlation_features(gyro_df, accel_df, left_template, right_template, target_length=750)
+        features = extract_correlation_features(gyro_df, accel_df, left_template, right_template, hand, n_left, n_right, target_length=750)
         
         # הוספת מזהים לאיחוד
         features['filename_clean'] = base_name + '.csv'
@@ -140,7 +158,7 @@ def save_correlation_stats(left_pairs, right_pairs, left_template, right_templat
             gyro_df = pd.read_csv(paths['gyro'])
             
             # חילוץ הפיצ'רים
-            features = extract_correlation_features(gyro_df, accel_df, left_template, right_template, target_length=750)
+            features = extract_correlation_features(gyro_df, accel_df, left_template, right_template, hand, n_left, n_right, target_length=750)
             
             # הפיכת המילון לשורה בטבלה עם פורמט מתאים ל-Summary
             row = {
@@ -163,3 +181,167 @@ save_correlation_stats(left_pairs, right_pairs, left_template, right_template, '
 corr_df = pd.DataFrame(all_correlation_data)
 corr_df.to_csv('New/correlation_features.csv', index=False)
 print("Correlation features saved to New/correlation_features.csv")
+
+def run_permutation_test(left_pairs, right_pairs, n_permutations=100):
+    # --- שלב 1: טעינת הנתונים לזיכרון (קורה רק פעם אחת) ---
+    print("Pre-loading data into memory...")
+    data_cache = {}
+    all_pairs_list = list(left_pairs.items()) + list(right_pairs.items())
+    
+    for base_name, paths in tqdm(all_pairs_list, desc="Loading CSVs"):
+        data_cache[base_name] = {
+            'accel': pd.read_csv(paths['accel']),
+            'gyro': pd.read_csv(paths['gyro'])
+        }
+
+    # --- שלב 2: הגדרות לפרמוטציות ---
+    all_data = []
+    n_left = len(left_pairs)
+    combined_items = list(left_pairs.items()) + list(right_pairs.items())
+    
+    pbar = tqdm(range(n_permutations + 1), desc="Permutation Progress")
+
+    for i in pbar:
+        # קביעת הקבוצות לאיטרציה הנוכחית
+        if i == 0:
+            current_left = list(left_pairs.items())
+            current_right = list(right_pairs.items())
+            perm_type = "original"
+        else:
+            shuffled = combined_items.copy()
+            random.shuffle(shuffled)
+            current_left = shuffled[:n_left]
+            current_right = shuffled[n_left:]
+            perm_type = f"perm_{i}"
+
+        # --- שלב 3: חישוב טמפלייטים (מהיר מאוד כי הכל ב-RAM) ---
+        pbar.set_postfix({"task": "templates"})
+        temp_left = create_template([data_cache[p[0]]['gyro'] for p in current_left], 'y_sg', target_length=750)
+        temp_right = create_template([data_cache[p[0]]['gyro'] for p in current_right], 'y_sg', target_length=750)
+
+        # --- שלב 4: חילוץ פיצ'רים ---
+        pbar.set_postfix({"task": "extracting"})
+        for group_name, group_data in [('left', current_left), ('right', current_right)]:
+            for base_name, _ in group_data:
+                # שליפת הנתונים מה-cache במקום מהדיסק
+                accel_df = data_cache[base_name]['accel']
+                gyro_df = data_cache[base_name]['gyro']
+                
+                features = extract_correlation_features(
+                    gyro_df, accel_df, temp_left, temp_right, 
+                    group_name, n_left, len(right_pairs), target_length=750
+                )
+                
+                all_data.append({
+                    'iteration': i,
+                    'type': perm_type,
+                    'filename': base_name,
+                    'assigned_as': group_name,
+                    **features
+                })
+                
+    return pd.DataFrame(all_data)
+
+def analyze_permutation_with_std(perm_df: pd.DataFrame):
+    stat_cols = ['gyro_accel_corr', 'gyro_gyro_corr', 'corr_with_right_template', 'corr_with_left_template']
+    
+    # 1. אגרגציה לכל איטרציה: מחשבים ממוצע וסטיית תקן של הקבצים בתוך אותה הרצה
+    iter_stats = perm_df.groupby(['iteration', 'type', 'assigned_as'])[stat_cols].agg(['mean', 'std'])
+    
+    # שיטוח השמות (למשל gyro_accel_corr_mean)
+    iter_stats.columns = [f"{c[0]}_{c[1]}" for c in iter_stats.columns]
+    iter_stats = iter_stats.reset_index()
+
+    # 2. הפרדה למקור ופרמוטציות
+    original = iter_stats[iter_stats['type'] == 'original']
+    perms = iter_stats[iter_stats['type'] != 'original']
+    
+    final_comparison = []
+
+    for hand in ['left', 'right']:
+        for col in stat_cols:
+            # הנתונים האמיתיים שלנו
+            orig_row = original[original['assigned_as'] == hand]
+            orig_mean = orig_row[f"{col}_mean"].values[0]
+            orig_std = orig_row[f"{col}_std"].values[0]
+            
+            # נתוני הפרמוטציות להשוואה
+            perm_hand_vals = perms[perms['assigned_as'] == hand]
+            perm_means = perm_hand_vals[f"{col}_mean"].values
+            
+            # חישוב P-value (על בסיס הממוצע)
+            p_val = np.sum(perm_means >= orig_mean) / len(perm_means)
+            
+            final_comparison.append({
+                'hand': hand,
+                'feature': col,
+                'orig_avg': orig_mean,      # הממוצע האמיתי של הקבוצה
+                'orig_std': orig_std,       # כמה הקבוצה המקורית הייתה הומוגנית
+                'perm_avg_mean': np.mean(perm_means), # ממוצע הניחושים האקראיים
+                'p_value': p_val,
+                'significant': p_val < 0.05
+            })
+            
+    return pd.DataFrame(final_comparison)
+
+def calculate_cohens_d(group1_data, group2_data):
+    """חישוב עוצמת אפקט (Cohen's d) תוך התחשבות בסטיית התקן"""
+    n1, n2 = len(group1_data), len(group2_data)
+    var1, var2 = np.var(group1_data, ddof=1), np.var(group2_data, ddof=1)
+    mu1, mu2 = np.mean(group1_data), np.mean(group2_data)
+    
+    # חישוב סטיית תקן מאוחדת (Pooled Standard Deviation)
+    pooled_std = np.sqrt(((n1 - 1) * var1 + (n2 - 1) * var2) / (n1 + n2 - 2))
+    
+    if pooled_std == 0: return 0
+    return (mu1 - mu2) / pooled_std
+
+def analyze_effect_size_permutation(perm_df: pd.DataFrame):
+    stat_cols = ['gyro_accel_corr', 'gyro_gyro_corr', 'corr_with_right_template', 'corr_with_left_template']
+    iterations = perm_df['iteration'].unique()
+    
+    effect_sizes = []
+
+    for i in iterations:
+        iter_data = perm_df[perm_df['iteration'] == i]
+        perm_type = iter_data['type'].iloc[0]
+        
+        iteration_results = {'iteration': i, 'type': perm_type}
+        
+        for col in stat_cols:
+            right_vals = iter_data[iter_data['assigned_as'] == 'right'][col].values
+            left_vals = iter_data[iter_data['assigned_as'] == 'left'][col].values
+            
+            # חישוב ה-d של כהן לאיטרציה הנוכחית
+            d = calculate_cohens_d(right_vals, left_vals)
+            iteration_results[col] = d
+            
+        effect_sizes.append(iteration_results)
+    
+    df_effect = pd.DataFrame(effect_sizes)
+    
+    # חישוב P-value על בסיס ה-Effect Size
+    summary = []
+    for col in stat_cols:
+        orig_d = df_effect[df_effect['type'] == 'original'][col].values[0]
+        perm_ds = df_effect[df_effect['type'] != 'original'][col].values
+        
+        # P-value: בכמה מהערבובים המקריים קיבלנו אפקט חזק יותר מהמציאות?
+        p_val = np.sum(np.abs(perm_ds) >= np.abs(orig_d)) / len(perm_ds)
+        
+        summary.append({
+            'feature': col,
+            'original_cohens_d': orig_d,
+            'p_value': p_val,
+            'interpretation': 'Large' if abs(orig_d) > 0.8 else 'Medium' if abs(orig_d) > 0.5 else 'Small'
+        })
+        
+    return pd.DataFrame(summary), df_effect
+
+permute_data = run_permutation_test(left_pairs, right_pairs, n_permutations=10000)
+print(permute_data.head())
+print(permute_data.columns)
+print(f"Permutation test completed with {len(permute_data)} rows of data.")
+
+p_value = analyze_effect_size_permutation(permute_data)
+print(p_value)
