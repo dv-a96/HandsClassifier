@@ -900,7 +900,7 @@ def create_stats_dfs(root_dir: str, save_dir: str) -> None:
                 out_path = os.path.join(save_dir, f"{hand.lower()}_{file_type}_stats.csv")
                 os.makedirs(save_dir, exist_ok=True)
                 stats_df.to_csv(out_path, index=False)
-                print(f"Stats DF saved to: {out_path}")
+                print(f"Stats DF saved to: {out_path}") 
 
 
 
@@ -1179,7 +1179,7 @@ def main():
 
     create_stats_dfs('New/Smoothed', 'New/Stats')
     create_global_summary('New/Stats', 'New/global_summery.csv')
-    plot_comprehensive_hand_comparison(pd.read_csv('New/global_summery.csv'), 'gyro', 'New/gyro_stats_summery.png')
+    plot_comprehensive_hand_comparison(pd.read_csv('New/global_summery.csv'), 'gyro', 'New/gyro_loo_stats_summery.png')
     plot_comprehensive_hand_comparison(pd.read_csv('New/global_summery.csv'), 'accel', 'New/accel_stats_summery.png') 
   
     # for hand in ['Left', 'Right']:
