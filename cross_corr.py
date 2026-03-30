@@ -5,6 +5,8 @@ import os
 import time
 import random
 from tqdm import tqdm
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 def create_template(list_of_dfs, axis='y_sg', target_length=200):
     """
@@ -65,7 +67,6 @@ def extract_correlation_features(df, accel_df, left_template, right_template, ha
     # Resample gyro_y to the target length for template correlation
     y_gyro_resampled = resample_signal(df['y_sg'].values, target_length)
     
-  
     if hand == 'Left':
         left_template = left_template * n_left
         left_template -= y_gyro_resampled
@@ -85,13 +86,18 @@ def extract_correlation_features(df, accel_df, left_template, right_template, ha
 
 
 def get_paired_files(directory):
+    '''
+    Scans the specified directory for CSV files and identifies pairs of files that correspond to the same base name but different types (accel and gyro).
+    Args:    directory (str): The path to the directory containing the CSV files.
+    Returns:    dict: A dictionary where each key is a base name (common part of the filename) and the value is another dictionary with keys 'accel' and 'gyro' containing the respective file paths.
+    '''
+
     pairs = {}
     for filename in os.listdir(directory):
         if not filename.endswith('.csv'):
             continue
             
-        # נניח שהקובץ הוא "20260325_1400_accel.csv"
-        # אנחנו לוקחים את הכל חוץ מהסיומת '_accel.csv' או '_gyro.csv'
+        # Extract the base name by removing the specific suffixes
         base_name = filename.replace('accel.csv', '').replace('gyro.csv', '')
         
         if base_name not in pairs:
@@ -102,7 +108,7 @@ def get_paired_files(directory):
         elif 'gyro' in filename:
             pairs[base_name]['gyro'] = os.path.join(directory, filename)
             
-    # מחזירים רק זוגות מלאים (שיש להם גם וגם)
+    # Return only those pairs that have both accel and gyro files
     return {k: v for k, v in pairs.items() if v['accel'] and v['gyro']}
 
 # left_gyro_list = [pd.read_csv(f'New/Smoothed/Left/{path}') for path in os.listdir('New/Smoothed/Left') if path.endswith('gyro.csv')]
@@ -157,18 +163,18 @@ def save_correlation_stats(left_pairs, right_pairs, left_template, right_templat
             accel_df = pd.read_csv(paths['accel'])
             gyro_df = pd.read_csv(paths['gyro'])
             
-            # חילוץ הפיצ'רים
+            # Features extraction
             features = extract_correlation_features(gyro_df, accel_df, left_template, right_template, hand, n_left, n_right, target_length=750)
             
-            # הפיכת המילון לשורה בטבלה עם פורמט מתאים ל-Summary
+            # Create a row for the stats file
             row = {
                 'filename': base_name,
-                'axis': 'sync', # ציר דמיוני לצורך הקיבוץ בגרף
+                'axis': 'sync', # Imaginary axis for stats file, since we are not storing the raw signals here
                 **features
             }
             data.append(row)
         
-        # שמירה כקובץ stats לכל דבר
+        # Save the stats to a CSV file
         df = pd.DataFrame(data)
         out_path = os.path.join(save_dir, f"{hand}_correlation_stats.csv")
         df.to_csv(out_path, index=False)
@@ -183,7 +189,7 @@ def save_correlation_stats(left_pairs, right_pairs, left_template, right_templat
 # print("Correlation features saved to New/correlation_features.csv")
 
 def run_permutation_test(left_pairs, right_pairs, n_permutations=100):
-    # --- שלב 1: טעינת הנתונים לזיכרון (קורה רק פעם אחת) ---
+    # Load all data into memory
     print("Pre-loading data into memory...")
     data_cache = {}
     all_pairs_list = list(left_pairs.items()) + list(right_pairs.items())
@@ -194,7 +200,7 @@ def run_permutation_test(left_pairs, right_pairs, n_permutations=100):
             'gyro': pd.read_csv(paths['gyro'])
         }
 
-    # --- שלב 2: הגדרות לפרמוטציות ---
+    # Permutation test
     all_data = []
     n_left = len(left_pairs)
     combined_items = list(left_pairs.items()) + list(right_pairs.items())
@@ -202,7 +208,7 @@ def run_permutation_test(left_pairs, right_pairs, n_permutations=100):
     pbar = tqdm(range(n_permutations + 1), desc="Permutation Progress")
 
     for i in pbar:
-        # קביעת הקבוצות לאיטרציה הנוכחית
+        # Decide which pairs to use for this iteration
         if i == 0:
             current_left = list(left_pairs.items())
             current_right = list(right_pairs.items())
@@ -214,16 +220,15 @@ def run_permutation_test(left_pairs, right_pairs, n_permutations=100):
             current_right = shuffled[n_left:]
             perm_type = f"perm_{i}"
 
-        # --- שלב 3: חישוב טמפלייטים (מהיר מאוד כי הכל ב-RAM) ---
+        # Template creation for the current permutation
         pbar.set_postfix({"task": "templates"})
         temp_left = create_template([data_cache[p[0]]['gyro'] for p in current_left], 'y_sg', target_length=750)
         temp_right = create_template([data_cache[p[0]]['gyro'] for p in current_right], 'y_sg', target_length=750)
 
-        # --- שלב 4: חילוץ פיצ'רים ---
+        # Feature extraction for the current permutation
         pbar.set_postfix({"task": "extracting"})
         for group_name, group_data in [('left', current_left), ('right', current_right)]:
             for base_name, _ in group_data:
-                # שליפת הנתונים מה-cache במקום מהדיסק
                 accel_df = data_cache[base_name]['accel']
                 gyro_df = data_cache[base_name]['gyro']
                 
@@ -245,14 +250,14 @@ def run_permutation_test(left_pairs, right_pairs, n_permutations=100):
 def analyze_permutation_with_std(perm_df: pd.DataFrame):
     stat_cols = ['gyro_accel_corr', 'gyro_gyro_corr', 'corr_with_right_template', 'corr_with_left_template']
     
-    # 1. אגרגציה לכל איטרציה: מחשבים ממוצע וסטיית תקן של הקבצים בתוך אותה הרצה
+    # Aggregate mean and std for each iteration, type, and assigned_as
     iter_stats = perm_df.groupby(['iteration', 'type', 'assigned_as'])[stat_cols].agg(['mean', 'std'])
     
-    # שיטוח השמות (למשל gyro_accel_corr_mean)
+    # Define new column names for the multi-index columns
     iter_stats.columns = [f"{c[0]}_{c[1]}" for c in iter_stats.columns]
     iter_stats = iter_stats.reset_index()
 
-    # 2. הפרדה למקור ופרמוטציות
+    # Separate original and permutation data for comparison
     original = iter_stats[iter_stats['type'] == 'original']
     perms = iter_stats[iter_stats['type'] != 'original']
     
@@ -260,24 +265,24 @@ def analyze_permutation_with_std(perm_df: pd.DataFrame):
 
     for hand in ['left', 'right']:
         for col in stat_cols:
-            # הנתונים האמיתיים שלנו
+            # The original mean and std for the current hand and feature
             orig_row = original[original['assigned_as'] == hand]
             orig_mean = orig_row[f"{col}_mean"].values[0]
             orig_std = orig_row[f"{col}_std"].values[0]
             
-            # נתוני הפרמוטציות להשוואה
+            # The permutation means for the current hand and feature
             perm_hand_vals = perms[perms['assigned_as'] == hand]
             perm_means = perm_hand_vals[f"{col}_mean"].values
             
-            # חישוב P-value (על בסיס הממוצע)
+            # Calculate p-value: how many permutation means are greater than or equal to the original mean?
             p_val = np.sum(perm_means >= orig_mean) / len(perm_means)
             
             final_comparison.append({
                 'hand': hand,
                 'feature': col,
-                'orig_avg': orig_mean,      # הממוצע האמיתי של הקבוצה
-                'orig_std': orig_std,       # כמה הקבוצה המקורית הייתה הומוגנית
-                'perm_avg_mean': np.mean(perm_means), # ממוצע הניחושים האקראיים
+                'orig_avg': orig_mean,      # Original average for the hand and feature
+                'orig_std': orig_std,       # How homogeneous the original group was
+                'perm_avg_mean': np.mean(perm_means), # Mean of the random guesses
                 'p_value': p_val,
                 'significant': p_val < 0.05
             })
@@ -290,7 +295,7 @@ def calculate_cohens_d(group1_data, group2_data):
     var1, var2 = np.var(group1_data, ddof=1), np.var(group2_data, ddof=1)
     mu1, mu2 = np.mean(group1_data), np.mean(group2_data)
     
-    # חישוב סטיית תקן מאוחדת (Pooled Standard Deviation)
+    # Pooled standard deviation calculation
     pooled_std = np.sqrt(((n1 - 1) * var1 + (n2 - 1) * var2) / (n1 + n2 - 2))
     
     if pooled_std == 0: return 0
@@ -312,7 +317,7 @@ def analyze_effect_size_permutation(perm_df: pd.DataFrame):
             right_vals = iter_data[iter_data['assigned_as'] == 'right'][col].values
             left_vals = iter_data[iter_data['assigned_as'] == 'left'][col].values
             
-            # חישוב ה-d של כהן לאיטרציה הנוכחית
+            # Calculate Cohen's d for the current feature and iteration
             d = calculate_cohens_d(right_vals, left_vals)
             iteration_results[col] = d
             
@@ -320,13 +325,13 @@ def analyze_effect_size_permutation(perm_df: pd.DataFrame):
     
     df_effect = pd.DataFrame(effect_sizes)
     
-    # חישוב P-value על בסיס ה-Effect Size
+    # Summery
     summary = []
     for col in stat_cols:
         orig_d = df_effect[df_effect['type'] == 'original'][col].values[0]
         perm_ds = df_effect[df_effect['type'] != 'original'][col].values
         
-        # P-value: בכמה מהערבובים המקריים קיבלנו אפקט חזק יותר מהמציאות?
+        # Calculate the p-value based on the proportion of permuted Cohen's d values that are as extreme as or more extreme than the original Cohen's d
         p_val = np.sum(np.abs(perm_ds) >= np.abs(orig_d)) / len(perm_ds)
         
         summary.append({
@@ -338,12 +343,10 @@ def analyze_effect_size_permutation(perm_df: pd.DataFrame):
         
     return pd.DataFrame(summary), df_effect
 
-import matplotlib.pyplot as plt
-import seaborn as sns
 
 def plot_permutation_d_dist(df_effect, summary_results, save_path=None):
     """
-    מציגה את התפלגות ה-Effect Size של הפרמוטציות מול הערך המקורי
+    Plots the distribution of Cohen's d values from the permutation test, and annotating with p-values.
     """
     stat_cols = summary_results['feature'].tolist()
     n_features = len(stat_cols)
@@ -354,34 +357,25 @@ def plot_permutation_d_dist(df_effect, summary_results, save_path=None):
     for i, col in enumerate(stat_cols):
         ax = axes[i]
         
-        # 1. שליפת הנתונים
+        # Data for plotting
         orig_d = df_effect[df_effect['type'] == 'original'][col].values[0]
         perm_ds = df_effect[df_effect['type'] != 'original'][col]
         p_val = summary_results.loc[summary_results['feature'] == col, 'p_value'].values[0]
         interpretation = summary_results.loc[summary_results['feature'] == col, 'interpretation'].values[0]
         
-        # 2. ציור התפלגות הפרמוטציות (The Null Hypothesis)
+        # Plotting the distribution of Cohen's d from permutations
         sns.kdeplot(perm_ds, fill=True, color="gray", alpha=0.3, ax=ax, label='Null Distribution (Shuffled)')
-        sns.rugplot(perm_ds, color="gray", alpha=0.5, ax=ax) # קווים קטנים לכל פרמוטציה
+        sns.rugplot(perm_ds, color="gray", alpha=0.5, ax=ax) # Add rug plot for individual points
         
-        # 3. סימון הערך המקורי
+        # Mark the original Cohen's d
         ax.axvline(orig_d, color='red', linestyle='--', linewidth=3, 
                    label=f'Original d = {orig_d:.2f} (p={p_val:.3f})')
         
-        # 4. הוספת אזורי ה"אפקט" לפי כהן (צבע רקע עדין)
-        ax.axvspan(-0.2, 0.2, color='green', alpha=0.05, label='Negligible Effect Zone')
-        
-        # 5. עיצוב
+        # Desidn
         ax.set_title(f'Permutation Test for Cohen\'s d: {col.replace("_", " ").title()}', fontsize=15)
         ax.set_xlabel('Cohen\'s d Value', fontsize=12)
         ax.set_ylabel('Density', fontsize=12)
-        
-        # הוספת טקסט פרשנות
-        status = "SIGNIFICANT" if p_val < 0.05 else "NOT SIGNIFICANT"
-        ax.text(0.05, 0.95, f'Status: {status}\nEffect Size: {interpretation}', 
-                transform=ax.transAxes, verticalalignment='top', 
-                bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
-        
+        # Legend
         ax.legend(loc='upper right')
         ax.grid(axis='x', alpha=0.3)
 
