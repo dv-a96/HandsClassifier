@@ -8,13 +8,15 @@ from sklearn.metrics import classification_report, confusion_matrix, ConfusionMa
 from sklearn.preprocessing import LabelEncoder
 from analyze_data import create_stats_dfs
 import cross_corr
+from feture_selction import load_feture_matrix, smart_feature_selection
+
 
 def split_train_test(data_path, test_size=0.2, random_state=42):
     # Split the dataset into training and testing sets
     # test_size: Proportion of the dataset to include in the test split (20% here)
     # random_state: Ensures reproducibility of the split
     files_id_set = set()
-    for hand in ['left', 'right']:
+    for hand in ['Left', 'Right']:
         hand_dir = os.path.join(data_path, hand)
         for filename in os.listdir(hand_dir):
             if filename.endswith('.csv'):
@@ -61,26 +63,59 @@ def extract_train_features(train_ids):
     n_left = len(left_pairs)
     n_right = len(right_pairs)
     cross_corr.save_correlation_stats(left_pairs, right_pairs, template_left, template_right, n_left, n_right, 'Temp/Stats')
-    # Unit corr data to one DF
+    # Unit left and right corr data to one DF
+    left_coor = pd.read_csv('Temp/Stats/left_correlation_stats.csv')
+    right_coor = pd.read_csv('Temp/Stats/right_correlation_stats.csv')
+    corr_df = pd.concat([left_coor, right_coor], ignore_index=True)
+    corr_df.to_csv('Temp/corr_features.csv', index=False)
     # Use load_feature_matrix to combine all features to single DF
+    fearues_df = load_feture_matrix('Temp/Stats', 'Temp/corr_features.csv', 'Temp/all_features.csv')
     # Optional: selsct features
+    selected_features_df = smart_feature_selection(fearues_df, target_col='label', threshold=0.90)
     os.rmdir('Temp')  # Clean up the temporary directory after feature extraction
-    return fearues_df, template_left, template_right
+    return selected_features_df, template_left, template_right, selected_features_df.columns
 
         
 
-def extract_test_features(test_samples, left_template, right_template):
-    pass
+def extract_test_features(test_samples, left_template, right_template, selected_features):
+    os.makedirs('TempTest', exist_ok=True)
+    os.makedirs('TempTest/Left', exist_ok=True)
+    os.makedirs('TempTest/Right', exist_ok=True)
+    # save the train samples in a the correct temporary directory for feature extraction
+    for file_id, file_path_acc, file_path_gyro in test_samples:
+        if file_path_acc and file_path_gyro:
+            hand = 'Left' if 'left' in file_path_acc else 'Right'
+            temp_dir = os.path.join('TempTest', hand)
+            # Save the accel and gyro files in the temporary directory for feature extraction
+            temp_acc_path = os.path.join(temp_dir, f'{file_id}accel.csv')
+            temp_gyro_path = os.path.join(temp_dir, f'{file_id}gyro.csv')
+            pd.read_csv(file_path_acc).to_csv(temp_acc_path, index=False)
+            pd.read_csv(file_path_gyro).to_csv(temp_gyro_path, index=False)
+    # Call the feature extraction function on the temporary directory
+    create_stats_dfs('TempTest', 'TempTest/Stats')
+    left_pairs = cross_corr.get_paired_files('TempTest/Left')
+    right_pairs = cross_corr.get_paired_files('TempTest/Right')
+    left_gyro_list = [pd.read_csv(f'TempTest/Left/{path}') for path in os.listdir('TempTest/Left') if path.endswith('gyro.csv')]
+    right_gyro_list = [pd.read_csv(f'TempTest/Right/{path}') for path in os.listdir('TempTest/Right') if path.endswith('gyro.csv')]
+    n_left = len(left_pairs)
+    n_right = len(right_pairs)
+    cross_corr.save_correlation_stats(left_pairs, right_pairs, left_template, right_template, n_left, n_right, 'TempTest/Stats')
+    # Unit left and right corr data to one DF
+    left_coor = pd.read_csv('TempTest/Stats/left_correlation_stats.csv')
+    right_coor = pd.read_csv('TempTest/Stats/right_correlation_stats.csv')
+    corr_df = pd.concat([left_coor, right_coor], ignore_index=True)
+    corr_df.to_csv('TempTest/corr_features.csv', index=False)
+    # Use load_feature_matrix to combine all features to single DF
+    fearues_df = load_feture_matrix('TempTest/Stats', 'TempTest/corr_features.csv', 'TempTest/all_features.csv')
+    selected_features_df = fearues_df[selected_features]  # Keep only the features that were selected during training
+    os.rmdir('TempTest')  # Clean up the temporary directory after feature extraction
+    return selected_features_df.drop(columns=['label_accel', 'label_gyro', 'label', 'filename_clean', 'filename_accel', 'filename_gyro'], errors='ignore'), selected_features_df['label']
 
-def train_hand_classifier(train_features_path):
-    # 1. Load the dataset
-    # Expects a table containing feature columns (mean, variance, intensity, etc.)
-    # and a 'label' column (Target variable)
-    df = pd.read_csv(train_features_path)
-
+def train_hand_classifier(train_features_df):
+    
     # Remove identification columns that should not be used as features for the model
-    X = df.drop(columns=['label_accel', 'label_gyro', 'label', 'filename_clean', 'filename_accel', 'filename_gyro'], errors='ignore')
-    y = df['label']
+    X = train_features_df.drop(columns=['label_accel', 'label_gyro', 'label', 'filename_clean', 'filename_accel', 'filename_gyro'], errors='ignore')
+    y = train_features_df['label']
     
     # 2. Encode the Target (e.g., 'Left'/'Right' -> 0/1)
     le = LabelEncoder()
@@ -131,5 +166,8 @@ def predict_and_evaluate(X, rf_model, le, test_samples, test_labels):
     
     return y_pred
 
-X, model , le = train_hand_classifier('New/selected_features.csv')
+train_ids, test_ids = split_train_test('New/Smoothed')
+train_df, template_left, template_right, selected_features = extract_train_features(train_ids)
+X_test, y_test = extract_test_features(test_ids, template_left, template_right, selected_features)
+X, model , le = train_hand_classifier(train_df)
 y_pred = predict_and_evaluate(X, model, le, X_test, y_test)
