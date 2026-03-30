@@ -66,12 +66,15 @@ def load_feture_matrix(features_path, corr_features_path, save_path=None):
 
     # Load correlation features
     corr_df = pd.read_csv(corr_features_path)
-    
+       
 
     # Combine Left and Right hand features into a single DataFrame
     full_stats_df = pd.concat([left_features, right_features], ignore_index=True)
 
     # Merge the correlation features into the full feature matrix based on filename
+    full_stats_df['filename_clean'] = full_stats_df['filename_clean'].str.replace('.csv', '', regex=False).str.strip()
+    corr_df['filename_clean'] = corr_df['filename_clean'].str.strip()
+
     final_combined_df = pd.merge(full_stats_df, corr_df.drop(columns=['label_from_corr']), on='filename_clean', how='inner')
     if save_path:
         final_combined_df.to_csv(save_path, index=False)

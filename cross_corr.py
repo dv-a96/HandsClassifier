@@ -168,9 +168,10 @@ def save_correlation_stats(left_pairs, right_pairs, left_template, right_templat
             
             # Create a row for the stats file
             row = {
-                'filename': base_name,
+                'filename_clean': base_name,
                 'axis': 'sync', # Imaginary axis for stats file, since we are not storing the raw signals here
-                **features
+                **features,
+                'label_from_corr': hand
             }
             data.append(row)
         

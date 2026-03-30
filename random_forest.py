@@ -9,33 +9,41 @@ from sklearn.preprocessing import LabelEncoder
 from analyze_data import create_stats_dfs
 import cross_corr
 from feture_selction import load_feture_matrix, smart_feature_selection
+import shutil
 
 
 def split_train_test(data_path, test_size=0.2, random_state=42):
-    # Split the dataset into training and testing sets
-    # test_size: Proportion of the dataset to include in the test split (20% here)
-    # random_state: Ensures reproducibility of the split
-    files_id_set = set()
+    # מילון שבו המפתח הוא file_id והערך הוא רשימה [file_id, accel_path, gyro_path]
+    files_dict = {}
+    
     for hand in ['Left', 'Right']:
         hand_dir = os.path.join(data_path, hand)
+        if not os.path.exists(hand_dir): continue # הגנה למקרה שהתיקייה חסרה
+        
         for filename in os.listdir(hand_dir):
             if filename.endswith('.csv'):
                 file_path = os.path.join(hand_dir, filename)
-                file_id = filename.replace('accel_', '').replace('gyro_', '').replace('.csv', '')
-                # Store the file ID along with its path for later use in feature extraction
-                file_path_acc, file_path_gyro = None, None
+                # חילוץ ה-ID
+                file_id = filename.replace('accel', '').replace('gyro', '').replace('.csv', '')
+                
+                # אם ה-ID לא קיים במילון, ניצור רשומה ריקה
+                if file_id not in files_dict:
+                    files_dict[file_id] = [file_id, None, None]
+                
+                # עדכון הנתיב המתאים בתוך המילון
                 if 'accel' in filename:
-                    file_path_acc = file_path
+                    files_dict[file_id][1] = file_path
                 elif 'gyro' in filename:
-                    file_path_gyro = file_path
-                if file_id in files_id_set and file_path_acc:
-                    files_id_set[file_id] = (file_id, file_path_acc, files_id_set[file_id][2])
-                elif file_id in files_id_set and file_path_gyro:
-                    files_id_set[file_id] = (file_id, files_id_set[file_id][1], file_path_gyro)
-                else:
-                    files_id_set.add((file_id, file_path_acc, file_path_gyro))
-    files_id_list = list(files_id_set)
-    train_ids, test_ids = train_test_split(files_id_list, test_size=test_size, random_state=random_state)
+                    files_dict[file_id][2] = file_path
+
+    # הפיכת ערכי המילון ללשימה של טאפלים (כדי שיחזור למבנה שרצית)
+    files_id_list = [tuple(val) for val in files_dict.values()]
+    
+    # חלוקה ל-Train ו-Test
+    train_ids, test_ids = train_test_split(
+        files_id_list, test_size=test_size, random_state=random_state
+    )
+    
     return train_ids, test_ids
 
 def extract_train_features(train_ids):
@@ -45,7 +53,7 @@ def extract_train_features(train_ids):
     # save the train samples in a the correct temporary directory for feature extraction
     for file_id, file_path_acc, file_path_gyro in train_ids:
         if file_path_acc and file_path_gyro:
-            hand = 'Left' if 'left' in file_path_acc else 'Right'
+            hand = 'Left' if 'Left' in file_path_acc else 'Right'
             temp_dir = os.path.join('Temp', hand)
             # Save the accel and gyro files in the temporary directory for feature extraction
             temp_acc_path = os.path.join(temp_dir, f'{file_id}accel.csv')
@@ -72,7 +80,7 @@ def extract_train_features(train_ids):
     fearues_df = load_feture_matrix('Temp/Stats', 'Temp/corr_features.csv', 'Temp/all_features.csv')
     # Optional: selsct features
     selected_features_df = smart_feature_selection(fearues_df, target_col='label', threshold=0.90)
-    os.rmdir('Temp')  # Clean up the temporary directory after feature extraction
+    shutil.rmtree('Temp')
     return selected_features_df, template_left, template_right, selected_features_df.columns
 
         
