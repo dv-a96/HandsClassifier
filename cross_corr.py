@@ -176,7 +176,7 @@ def save_correlation_stats(left_pairs, right_pairs, left_template, right_templat
             data.append(row)
         
         # Save the stats to a CSV file
-        df = pd.DataFrame(data)
+        df = pd.DataFrame(data).drop(columns=['axis'])  # Drop the 'axis' column as it's not needed in the stats file
         out_path = os.path.join(save_dir, f"{hand}_correlation_stats.csv")
         df.to_csv(out_path, index=False)
         print(f"Saved correlation stats to: {out_path}")

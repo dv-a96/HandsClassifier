@@ -92,7 +92,7 @@ def extract_test_features(test_samples, left_template, right_template, selected_
     # save the train samples in a the correct temporary directory for feature extraction
     for file_id, file_path_acc, file_path_gyro in test_samples:
         if file_path_acc and file_path_gyro:
-            hand = 'Left' if 'left' in file_path_acc else 'Right'
+            hand = 'Left' if 'Left' in file_path_acc else 'Right'
             temp_dir = os.path.join('TempTest', hand)
             # Save the accel and gyro files in the temporary directory for feature extraction
             temp_acc_path = os.path.join(temp_dir, f'{file_id}accel.csv')
@@ -116,7 +116,7 @@ def extract_test_features(test_samples, left_template, right_template, selected_
     # Use load_feature_matrix to combine all features to single DF
     fearues_df = load_feture_matrix('TempTest/Stats', 'TempTest/corr_features.csv', 'TempTest/all_features.csv')
     selected_features_df = fearues_df[selected_features]  # Keep only the features that were selected during training
-    os.rmdir('TempTest')  # Clean up the temporary directory after feature extraction
+    shutil.rmtree('TempTest')  # Clean up the temporary directory after feature extraction
     return selected_features_df.drop(columns=['label_accel', 'label_gyro', 'label', 'filename_clean', 'filename_accel', 'filename_gyro'], errors='ignore'), selected_features_df['label']
 
 def train_hand_classifier(train_features_df):
@@ -138,9 +138,9 @@ def train_hand_classifier(train_features_df):
 
     return X, rf_model, le
 
-def predict_and_evaluate(X, rf_model, le, test_samples, test_labels):
-    X_test = extract_test_features(test_samples)
-    y_test = le.transform(test_labels)
+def predict_and_evaluate(test_files, selected_features, rf_model, le, template_left, template_right):
+    X_test, y_test = extract_test_features(test_files, template_left, template_right, selected_features)
+    y_test_encoded = le.transform(y_test)  # Encode the test labels using the same encoder as training
     # 5. Model Evaluation
     y_pred = rf_model.predict(X_test)
     print(f"DEBUG: type(y_test) = {type(y_test)}, shape = {getattr(y_test, 'shape', 'no shape')}")
@@ -148,12 +148,12 @@ def predict_and_evaluate(X, rf_model, le, test_samples, test_labels):
     print(f"DEBUG: target_names = {le.classes_}")
         
     print("--- Classification Report ---")
-    print(classification_report(y_test, y_pred, target_names=le.classes_.astype(str)))
+    print(classification_report(y_test_encoded, y_pred, target_names=le.classes_.astype(str)))
     
     # Display the Confusion Matrix
     # Helps visualize where the model confuses 'Left' with 'Right'
     fig, ax = plt.subplots(figsize=(8, 6))
-    cm = confusion_matrix(y_test, y_pred)
+    cm = confusion_matrix(y_test_encoded, y_pred)
     disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=le.classes_)
     disp.plot(cmap='Blues', ax=ax)
     plt.title('Confusion Matrix: Left vs Right')
@@ -178,4 +178,4 @@ train_ids, test_ids = split_train_test('New/Smoothed')
 train_df, template_left, template_right, selected_features = extract_train_features(train_ids)
 X_test, y_test = extract_test_features(test_ids, template_left, template_right, selected_features)
 X, model , le = train_hand_classifier(train_df)
-y_pred = predict_and_evaluate(X, model, le, X_test, y_test)
+y_pred = predict_and_evaluate(test_ids, selected_features, model, le, template_left, template_right)
