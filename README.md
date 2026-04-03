@@ -30,7 +30,7 @@ To verify that there are no inconsistencies in the sampling rate of a file (caus
 
 ![Sampling rate's histogram]()
 
-To address these inconsistencies and ensure a uniform temporal grid for further analysis, we performed a resampling of the data to a fixed sampling rate of 500 Hz (a constant interval of 2 ms). In cases where the device "missed" a point we employed linear interpolation to estimate the missing values based on there seroundings points.
+To address these inconsistencies and ensure a uniform temporal grid for further analysis, we performed a resampling of the data to a fixed sampling rate of 500 Hz (a constant value of 2 ms in the `diff` column). In cases where the device "missed" a point we employed linear interpolation to estimate the missing values based on there seroundings points.
 
 
 ### Remove gravity acceleration and static bias
