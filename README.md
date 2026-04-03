@@ -24,12 +24,14 @@ For every recorded session, the following files were generated:
 Each CSV file consists of four columns: three representing the spatial axes ($X, Y, Z$) and one for the timestamps.
 
 ## Pre processing
-### Sampling inconsistency 
+### Sampling consistency 
 
 To verify that there are no inconsistencies in the sampling rate of a file (caused by system load or other technical issues) we calculate a `diff` column for every file, represents the differance between the sampling time of each point. We plot the histogram of this column to see the disterbution of the values of the time differance between sampling - the sampling rate. If the sampling rate is consistant we expect to see one value (or at least narrow disterbution with no large differance betwwen values). But when we ploted the histograms of the files we saw that almost in every files there are some points with sampling rate around 4-5ms where the common range of the sampling is around 2 ms. This indicate that in most of the files there's at least one point that the device "missed a point" during the sampling.
 
 ![Sampling rate's histogram]()
-### Resampling and Interpolation 
+
+To address these inconsistencies and ensure a uniform temporal grid for further analysis, we performed a resampling of the data to a fixed sampling rate of 500 Hz (a constant interval of 2 ms). In cases where the device "missed" a point we employed linear interpolation to estimate the missing values based on there seroundings points.
+
 
 ### Remove gravity acceleration and static bias
 
@@ -42,7 +44,6 @@ In gyroscope data, sensors frequently exhibit a "Static Bias"—a non-zero readi
 To mitigate this, we implemented a second-order Butterworth high-pass filter designed to dynamically isolate and remove the bias. By utilizing a very low cutoff frequency of 0.1 Hz, the filter effectively identifies the slow-moving sensor drift as a DC component and subtracts it from the signal in real-time. This approach preserves the integrity of the actual rotational velocity while ensuring a zero-mean signal, thereby significantly reducing integration drift and enhancing the overall accuracy of the orientation data.
 
 ### Smoothing
-many under data analysis
 
 ## Features Extracion
 Two types of features were extracted:
