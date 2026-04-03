@@ -45,6 +45,10 @@ To mitigate this, we implemented a second-order Butterworth high-pass filter des
 
 ### Smoothing
 
+Despite removing the gravitational components and static bias, the signals still exhibited high-frequency artifacts characterized by abrupt, sharp peaks. These rapid fluctuations—occurring on a millisecond scale—are physically inconsistent with intentional human motion and likely stem from electronic noise or sensor jitter. To eliminate these artifacts, we evaluated two smoothing techniques: Moving Average and the Savitzky-Golay filter.
+
+While the Moving Average filter effectively reduced noise, it tended to "smear" the signal, causing a loss of important peak information and shifting the temporal alignment of the motion. In contrast, the Savitzky-Golay filter was selected because it uses local polynomial regression to smooth the data while better preserving the original shape and height of the signal's peaks. This allowed us to suppress the noise without compromising the dynamic characteristics of the hand gestures.
+
 ## Features Extracion
 Two types of features were extracted:
 1. statistical features
