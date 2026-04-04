@@ -51,9 +51,36 @@ While the Moving Average filter effectively reduced noise, it tended to "smear" 
 
 ## Features Extracion
 
-   
-### statistical features
-### correlation features
+For each sample 82 features were extracted:
+
+1. Statistical Time-Domain Features
+* Mean: The average value of the signal.
+* Variance: Measures the spread of the data points.
+* Min / Max: The extreme values reached during the movment.
+* Median: The middle value of the signal.
+* Delta Min-Max: The total range of the signal ($Max - Min$).
+* Skewness: Measures the asymmetry of the signal distribution around its mean.
+* Intensity: Represents the overall magnitude of the movement (calculated as the sum of absolute values).
+* ZCR (Zero Crossing Rate): The rate at which the signal changes sign. High ZCR often indicates rapid oscillations.
+
+2. Count & Index Features
+* Count Positive / Negative: The number of samples with values above or below zero.
+* Argmax / Argmin: The temporal indices (time steps) where the signal reaches its maximum and minimum values.
+
+3. Correlation Features
+
+These features capture the relationships between different axes, sensors, and pre-defined gesture patterns to identify complex movement signatures:
+* Cross-Sensor Correlation
+** Gyro-Accel Correlation (gyro_accel_corr): Measures the linear relationship between the Gyroscope (Y-axis) and Accelerometer (X-axis).
+** Gyro-Gyro Correlation (gyro_gyro_corr): Measures the relationship between the Y and X axes of the Gyroscope to capture rotational patterns.
+* Template Matching (Leave-One-Out):
+To improve classification accuracy, the system compares the current signal against dynamic templates for "Left" and "Right" gestures using the Pearson correlation coefficient:
+
+** Correlation with Right Template: Measures how closely the current signal matches the average "Right" hand gesture profile.
+
+** Correlation with Left Template: Measures how closely the current signal matches the average "Left" hand gesture profile.
+
+** Leave-One-Out Adjustment: During training, templates are dynamically adjusted to exclude the current sample, ensuring the correlation score is not biased by the sample's own data
 ## Features Selection
 
 ## Random Forest Classifier
