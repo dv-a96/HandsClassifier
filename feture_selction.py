@@ -73,7 +73,7 @@ def load_feture_matrix(features_path, corr_features_path, save_path=None):
 
     # Merge the correlation features into the full feature matrix based on filename
     full_stats_df['filename_clean'] = full_stats_df['filename_clean'].str.replace('.csv', '', regex=False).str.strip()
-    corr_df['filename_clean'] = corr_df['filename_clean'].str.strip()
+    corr_df['filename_clean'] = corr_df['filename_clean'].str.replace('.csv', '', regex=False).str.strip()
 
     final_combined_df = pd.merge(full_stats_df, corr_df.drop(columns=['label_from_corr']), on='filename_clean', how='inner')
     if save_path:

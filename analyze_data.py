@@ -2,6 +2,8 @@ import os
 import glob
 import numpy as np
 import pandas as pd
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.lines import Line2D
@@ -1006,7 +1008,7 @@ def create_global_summary(stats_dir: str, out_path: str = None) -> pd.DataFrame:
     group_cols = ['hand', 'sensor', 'axis']
     
     # הפונקציה תמצא אוטומטית את העמודות החדשות (gyro_accel_corr וכו') ותעשה להן ממוצע
-    stat_cols = [c for c in master_df.columns if c not in group_cols + ['filename']]
+    stat_cols = [c for c in master_df.columns if c not in group_cols + ['filename', 'filename_clean', 'label_from_corr']]
     agg_dict = {col: ['mean', 'std'] for col in stat_cols}
     
     summary = master_df.groupby(group_cols).agg(agg_dict)
@@ -1089,8 +1091,11 @@ def plot_comprehensive_hand_comparison(summary_df, sensor_type='Accel', save_pat
         return
 
     # 2. Automatically identify all statistical metrics based on the '_avg' suffix
+    if sensor_type.lower() == 'accel':
+        # Remove correlation columns for accel to focus on original metrics
+        summary_df = summary_df[[col for col in summary_df.columns if 'corr' not in col.lower()]]
     metrics = [col.replace('_avg', '') for col in summary_df.columns if col.endswith('_avg')]
-    
+
     # 3. Calculate grid dimensions (3 columns per row)
     num_metrics = len(metrics)
     n_cols = 3

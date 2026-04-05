@@ -111,48 +111,7 @@ def get_paired_files(directory):
     # Return only those pairs that have both accel and gyro files
     return {k: v for k, v in pairs.items() if v['accel'] and v['gyro']}
 
-# left_gyro_list = [pd.read_csv(f'New/Smoothed/Left/{path}') for path in os.listdir('New/Smoothed/Left') if path.endswith('gyro.csv')]
-# n_left = len(left_gyro_list)
-# right_gyro_list = [pd.read_csv(f'New/Smoothed/Right/{path}') for path in os.listdir('New/Smoothed/Right') if path.endswith('gyro.csv')]
-# n_right = len(right_gyro_list)
-# left_accel_list = [pd.read_csv(f'New/Smoothed/Left/{path}') for path in os.listdir('New/Smoothed/Left') if path.endswith('accel.csv')]
-# right_accel_list = [pd.read_csv(f'New/Smoothed/Right/{path}') for path in os.listdir('New/Smoothed/Right') if path.endswith('accel.csv')]
-# left_template = create_template(left_gyro_list, axis='y_sg', target_length=750)
-# right_template = create_template(right_gyro_list, axis='y_sg', target_length=750)
 
-
-
-# # Plot right vs left template
-# import matplotlib.pyplot as plt
-# plt.figure(figsize=(10, 5))
-# plt.plot(left_template, label='Left Template', color='blue')
-# plt.plot(right_template, label='Right Template', color='orange')
-# plt.title('Left vs Right Template Signals')
-# plt.xlabel('Time (normalized)')
-# plt.ylabel('Gyro Signal')
-# plt.legend()
-# plt.show()
-
-# left_pairs = get_paired_files('New/Smoothed/Left')
-# right_pairs = get_paired_files('New/Smoothed/Right')
-# # בתוך cross_corr.py - בסוף הקובץ
-# all_correlation_data = []
-
-# # עיבוד כל הזוגות (Left ו-Right)
-# for hand, pairs in [('Left', left_pairs), ('Right', right_pairs)]:
-#     for base_name, paths in pairs.items():
-#         accel_df = pd.read_csv(paths['accel'])
-#         gyro_df = pd.read_csv(paths['gyro'])
-        
-#         # חילוץ הפיצ'רים
-#         features = extract_correlation_features(gyro_df, accel_df, left_template, right_template, hand, n_left, n_right, target_length=750)
-        
-#         # הוספת מזהים לאיחוד
-#         features['filename_clean'] = base_name + '.csv'
-#         features['label_from_corr'] = hand
-#         all_correlation_data.append(features)
-
-# בתוך cross_corr.py
 
 def save_correlation_stats(left_pairs, right_pairs, left_template, right_template, n_left, n_right, save_dir):
     os.makedirs(save_dir, exist_ok=True)
@@ -181,13 +140,7 @@ def save_correlation_stats(left_pairs, right_pairs, left_template, right_templat
         df.to_csv(out_path, index=False)
         print(f"Saved correlation stats to: {out_path}")
 
-# # קריאה לפונקציה בסוף הקובץ
-# save_correlation_stats(left_pairs, right_pairs, left_template, right_template, 'New/Stats')
 
-# # שמירה לקובץ ביניים
-# corr_df = pd.DataFrame(all_correlation_data)
-# corr_df.to_csv('New/correlation_features.csv', index=False)
-# print("Correlation features saved to New/correlation_features.csv")
 
 def run_permutation_test(left_pairs, right_pairs, n_permutations=100):
     # Load all data into memory
@@ -248,47 +201,6 @@ def run_permutation_test(left_pairs, right_pairs, n_permutations=100):
                 
     return pd.DataFrame(all_data)
 
-def analyze_permutation_with_std(perm_df: pd.DataFrame):
-    stat_cols = ['gyro_accel_corr', 'gyro_gyro_corr', 'corr_with_right_template', 'corr_with_left_template']
-    
-    # Aggregate mean and std for each iteration, type, and assigned_as
-    iter_stats = perm_df.groupby(['iteration', 'type', 'assigned_as'])[stat_cols].agg(['mean', 'std'])
-    
-    # Define new column names for the multi-index columns
-    iter_stats.columns = [f"{c[0]}_{c[1]}" for c in iter_stats.columns]
-    iter_stats = iter_stats.reset_index()
-
-    # Separate original and permutation data for comparison
-    original = iter_stats[iter_stats['type'] == 'original']
-    perms = iter_stats[iter_stats['type'] != 'original']
-    
-    final_comparison = []
-
-    for hand in ['left', 'right']:
-        for col in stat_cols:
-            # The original mean and std for the current hand and feature
-            orig_row = original[original['assigned_as'] == hand]
-            orig_mean = orig_row[f"{col}_mean"].values[0]
-            orig_std = orig_row[f"{col}_std"].values[0]
-            
-            # The permutation means for the current hand and feature
-            perm_hand_vals = perms[perms['assigned_as'] == hand]
-            perm_means = perm_hand_vals[f"{col}_mean"].values
-            
-            # Calculate p-value: how many permutation means are greater than or equal to the original mean?
-            p_val = np.sum(perm_means >= orig_mean) / len(perm_means)
-            
-            final_comparison.append({
-                'hand': hand,
-                'feature': col,
-                'orig_avg': orig_mean,      # Original average for the hand and feature
-                'orig_std': orig_std,       # How homogeneous the original group was
-                'perm_avg_mean': np.mean(perm_means), # Mean of the random guesses
-                'p_value': p_val,
-                'significant': p_val < 0.05
-            })
-            
-    return pd.DataFrame(final_comparison)
 
 def calculate_cohens_d(group1_data, group2_data):
     """חישוב עוצמת אפקט (Cohen's d) תוך התחשבות בסטיית התקן"""
@@ -388,16 +300,70 @@ def plot_permutation_d_dist(df_effect, summary_results, save_path=None):
     else:
         plt.show()
 
-# permute_data = run_permutation_test(left_pairs, right_pairs, n_permutations=10000)
-# print(permute_data.head())
-# print(permute_data.columns)
-# print(f"Permutation test completed with {len(permute_data)} rows of data.")
+left_gyro_list = [pd.read_csv(f'New/Smoothed/Left/{path}') for path in os.listdir('New/Smoothed/Left') if path.endswith('gyro.csv')]
+n_left = len(left_gyro_list)
+right_gyro_list = [pd.read_csv(f'New/Smoothed/Right/{path}') for path in os.listdir('New/Smoothed/Right') if path.endswith('gyro.csv')]
+n_right = len(right_gyro_list)
+left_accel_list = [pd.read_csv(f'New/Smoothed/Left/{path}') for path in os.listdir('New/Smoothed/Left') if path.endswith('accel.csv')]
+right_accel_list = [pd.read_csv(f'New/Smoothed/Right/{path}') for path in os.listdir('New/Smoothed/Right') if path.endswith('accel.csv')]
+left_template = create_template(left_gyro_list, axis='y_sg', target_length=750)
+right_template = create_template(right_gyro_list, axis='y_sg', target_length=750)
 
-# summary_results, df_effect = analyze_effect_size_permutation(permute_data)
-# summary_results.to_csv('New/permutation_summary.csv', index=False)
-# print("Permutation summary saved to New/permutation_summary.csv")
-# df_effect.to_csv('New/permutation_effect_sizes.csv', index=False) 
-# print("Permutation effect sizes saved to New/permutation_effect_sizes.csv")
+
+
+# Plot right vs left template
+import matplotlib.pyplot as plt
+plt.figure(figsize=(10, 5))
+plt.plot(left_template, label='Left Template', color='blue')
+plt.plot(right_template, label='Right Template', color='orange')
+plt.title('Left vs Right Template Signals')
+plt.xlabel('Time (normalized)')
+plt.ylabel('Gyro Signal')
+plt.legend()
+plt.show()
+
+left_pairs = get_paired_files('New/Smoothed/Left')
+right_pairs = get_paired_files('New/Smoothed/Right')
+# בתוך cross_corr.py - בסוף הקובץ
+all_correlation_data = []
+
+# עיבוד כל הזוגות (Left ו-Right)
+for hand, pairs in [('Left', left_pairs), ('Right', right_pairs)]:
+    for base_name, paths in pairs.items():
+        accel_df = pd.read_csv(paths['accel'])
+        gyro_df = pd.read_csv(paths['gyro'])
+        
+        # חילוץ הפיצ'רים
+        features = extract_correlation_features(gyro_df, accel_df, left_template, right_template, hand, n_left, n_right, target_length=750)
+        
+        # הוספת מזהים לאיחוד
+        features['filename_clean'] = base_name + '.csv'
+        features['label_from_corr'] = hand
+        all_correlation_data.append(features)
+
+# בתוך cross_corr.py
+
+# קריאה לפונקציה בסוף הקובץ
+save_correlation_stats(left_pairs, right_pairs, left_template, right_template, n_left, n_right, 'New/Stats')
+
+# שמירה לקובץ ביניים
+corr_df = pd.DataFrame(all_correlation_data)
+corr_df.to_csv('New/correlation_features.csv', index=False)
+print("Correlation features saved to New/correlation_features.csv")
+
+
+
+
+permute_data = run_permutation_test(left_pairs, right_pairs, n_permutations=10000)
+print(permute_data.head())
+print(permute_data.columns)
+print(f"Permutation test completed with {len(permute_data)} rows of data.")
+
+summary_results, df_effect = analyze_effect_size_permutation(permute_data)
+summary_results.to_csv('New/permutation_summary.csv', index=False)
+print("Permutation summary saved to New/permutation_summary.csv")
+df_effect.to_csv('New/permutation_effect_sizes.csv', index=False) 
+print("Permutation effect sizes saved to New/permutation_effect_sizes.csv")
 df_effect = pd.read_csv('New/permutation_effect_sizes.csv')
 summary_results = pd.read_csv('New/permutation_summary.csv')
 plot_permutation_d_dist(df_effect, summary_results, save_path='New/permutation_effect_size_distribution.png')

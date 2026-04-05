@@ -174,7 +174,7 @@ def predict_and_evaluate(test_files, selected_features, rf_model, le, template_l
     
     return y_pred
 
-train_ids, test_ids = split_train_test('New/Smoothed')
+train_ids, test_ids = split_train_test('New/Smoothed', 0.3, 42)
 train_df, template_left, template_right, selected_features = extract_train_features(train_ids)
 X_test, y_test = extract_test_features(test_ids, template_left, template_right, selected_features)
 X, model , le = train_hand_classifier(train_df)

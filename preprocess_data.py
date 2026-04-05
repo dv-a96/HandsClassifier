@@ -3,6 +3,8 @@ import glob
 import pandas as pd
 import files_prepro
 import analyze_data
+import gc
+import matplotlib.pyplot as plt
 
 
 def load_data(root_dir) -> pd.DataFrame:
@@ -76,7 +78,9 @@ def main():
     for hand in ['Left', 'Right']:
         for file_type in ['accel', 'gyro']:
             for ax in ['x', 'y', 'z']:
-                analyze_data.plot_hand_data(f'{raw_data_path}/{hand}', file_type=file_type,max_files=8, axis=ax, raw=True, save_path=f'{raw_data_path}/{hand.lower()}_{file_type}_{ax}_raw.png')
+                analyze_data.plot_hand_data(f'{raw_data_path}/{hand}', file_type=file_type,max_files=11, axis=ax, raw=True, save_path=f'{raw_data_path}/{hand.lower()}_{file_type}_{ax}_raw.png')
+                plt.close('all')  # Close the plot to free memory
+            gc.collect()  # Force garbage collection to free memory after processing each hand
     
     # Check raw data sample rate
     accel_sampling_rates_list = files_prepro.add_timestamp_diff_column(raw_data_path, 'accel')
@@ -97,7 +101,9 @@ def main():
     for hand in ['Left', 'Right']:
         for file_type in ['accel', 'gyro']:
             for ax in ['x', 'y', 'z']:
-                analyze_data.plot_hand_data(f'New/Resampled/{hand}', file_type=file_type, max_files=8, axis=ax, raw=False, save_path=f'New/Resampled/{hand.lower()}_{file_type}_{ax}_res.png')
+                analyze_data.plot_hand_data(f'New/Resampled/{hand}', file_type=file_type, max_files=11, axis=ax, raw=False, save_path=f'New/Resampled/{hand.lower()}_{file_type}_{ax}_res.png')
+                plt.close('all')  # Close the plot to free memory
+            gc.collect()  # Force garbage collection to free memory after processing each hand
     
 
     # Clean the data
@@ -107,20 +113,24 @@ def main():
     for hand in ['Left', 'Right']:
         for file_type in ['accel', 'gyro']:
             for ax in ['x', 'y', 'z']:
-                analyze_data.plot_hand_data(f'New/Clean/{hand}', file_type=file_type, max_files=8, axis=ax, raw=False, save_path=f'New/Clean/{hand.lower()}_{file_type}_{ax}_clean.png')
+                analyze_data.plot_hand_data(f'New/Clean/{hand}', file_type=file_type, max_files=11, axis=ax, raw=False, save_path=f'New/Clean/{hand.lower()}_{file_type}_{ax}_clean.png')
+                plt.close('all')  # Close the plot to free memory
+            gc.collect()  # Force garbage collection to free memory after processing each hand
 
 
     # Smooth the cleaned data
     for hand in ['Left', 'Right']:
         for file_type in ['accel', 'gyro']:
-            analyze_data.smooth_and_save_hand_data(hand_dir=f'New/Clean/{hand}', save_dir=f'New/Smoothed/{hand}', file_type=file_type, max_files=8)
+            analyze_data.smooth_and_save_hand_data(hand_dir=f'New/Clean/{hand}', save_dir=f'New/Smoothed/{hand}', file_type=file_type, max_files=11)
 
 
     # Plot smoothed data for each hand, file type, and axis
     for hand in ['Left', 'Right']:
         for file_type in ['accel', 'gyro']:
             for ax in ['x', 'y', 'z']:
-                analyze_data.plot_hand_data(f'New/Smoothed/{hand}', file_type=file_type,max_files=8, axis=ax, raw=False, save_path=f'New/Smoothed/{hand.lower()}_{file_type}_{ax}_smoothed.png')
+                analyze_data.plot_hand_data(f'New/Smoothed/{hand}', file_type=file_type,max_files=11, axis=ax, raw=False, save_path=f'New/Smoothed/{hand.lower()}_{file_type}_{ax}_smoothed.png')
+                plt.close('all')  # Close the plot to free memory
+            gc.collect()  # Force garbage collection to free memory after processing each hand
 
 if __name__ == "__main__":
     main()
