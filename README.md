@@ -81,7 +81,14 @@ To improve classification accuracy, the system compares the current signal again
 ** Correlation with Left Template: Measures how closely the current signal matches the average "Left" hand gesture profile.
 
 ** Leave-One-Out Adjustment: During training, templates are dynamically adjusted to exclude the current sample, ensuring the correlation score is not biased by the sample's own data
+
 ## Features Selection
+
+To optimize the model and reduce dimensionality, we removed redundant features—specifically those with a correlation coefficient higher than 0.9. High correlation suggests that one feature can be largely predicted from another.
+
+​For each pair of highly correlated features, we decided which one to retain by calculating the correlation between each feature and the target label (Left or Right hand). The feature with the lower correlation to the label was removed, ensuring that we kept the most informative predictors.
+
+​Through this process, we eliminated [number] redundant features, resulting in a final set of [number] features.
 
 ## Random Forest Classifier
 
