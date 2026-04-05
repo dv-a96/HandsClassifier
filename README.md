@@ -9,8 +9,9 @@ To ensure consistency across the dataset, a standardized movement protocol was f
 **Initial Position:** The device is held with a straight arm directly in front of the face.
 
 **Movement:** The device is brought toward the nose and then extended back to the initial position.
+The participents were guided to wait a moment after the recording started, when they reached next to the nose and in the end of the movment.
 
-**Variations:** Data was captured in both sitting and standing postures.
+The data collected from __ different participents, men and wemen, with avarge age of __.
 
 For every recorded session, the following files were generated:
 
@@ -20,58 +21,76 @@ For every recorded session, the following files were generated:
 
 `vidname_gyro.csv:` Gyroscope data (X, Y, Z axes) with corresponding timestamps.
 
-Each CSV file consists of four columns: three representing the spatial axes ($X, Y, Z$) and one for the high-precision timestamps used for synchronization.
+Each CSV file consists of four columns: three representing the spatial axes ($X, Y, Z$) and one for the timestamps.
 
-
-## Files Cleaning
-### Sampling inconsistency 
+## Pre processing
+### Sampling consistency 
 
 To verify that there are no inconsistencies in the sampling rate of a file (caused by system load or other technical issues) we calculate a `diff` column for every file, represents the differance between the sampling time of each point. We plot the histogram of this column to see the disterbution of the values of the time differance between sampling - the sampling rate. If the sampling rate is consistant we expect to see one value (or at least narrow disterbution with no large differance betwwen values). But when we ploted the histograms of the files we saw that almost in every files there are some points with sampling rate around 4-5ms where the common range of the sampling is around 2 ms. This indicate that in most of the files there's at least one point that the device "missed a point" during the sampling.
 
 ![Sampling rate's histogram]()
-### Resampling and Interpolation 
 
-### Smoothing
-many under data analysis
+To address these inconsistencies and ensure a uniform temporal grid for further analysis, we performed a resampling of the data to a fixed sampling rate of 500 Hz (a constant value of 2 ms in the `diff` column). In cases where the device "missed" a point we employed linear interpolation to estimate the missing values based on there seroundings points.
 
-### Remove gravity acceleration
+
+### Remove gravity acceleration and static bias
 
 In accelerometer data, the measured acceleration includes both the device's motion and the constant gravitational acceleration. Since the videos were recorded in selfie mode (device held vertically), the gravity component primarily affects the Y-axis, appearing as a constant offset around 9.8 m/s² (depending on orientation).
 
 To isolate the actual motion-induced acceleration, we applied a low-frequency Butterworth high-pass filter to remove the gravity component while preserving the dynamic motion signals. For the gyroscope data, which measures rotational velocity, no such correction was needed as gravity does not affect angular measurements.
 
-### Sensor Data Preprocessing: Gravity and Bias Removal
+In gyroscope data, sensors frequently exhibit a "Static Bias"—a non-zero reading that persists even when the device is completely stationary. Over time, this bias is subject to "drift" driven by thermal fluctuations and electrical noise. If left uncompensated, these residual offsets accumulate during the integration process, might resulting in significant errors in calculated angular displacement.
 
-This module handles the cleaning and normalization of raw inertial sensor data (Accelerometer and Gyroscope) to ensure high-fidelity motion analysis. The primary goal is to isolate the Linear Acceleration of the hand and remove the Sensor Bias from the rotational data.
-1. Accelerometer: Gravity Removal (High-Pass Filtering)
+To mitigate this, we implemented a second-order Butterworth high-pass filter designed to dynamically isolate and remove the bias. By utilizing a very low cutoff frequency of 0.1 Hz, the filter effectively identifies the slow-moving sensor drift as a DC component and subtracts it from the signal in real-time. This approach preserves the integrity of the actual rotational velocity while ensuring a zero-mean signal, thereby significantly reducing integration drift and enhancing the overall accuracy of the orientation data.
 
-Raw accelerometer data contains a constant component of approximately $9.8 \, m/s^2$ due to Earth's gravity. When the device is tilted, this gravity vector is distributed across the X, Y, and Z axes, masking the actual motion of the user.Method: A 4th-order Butterworth High-Pass Filter is applied to all three axes.Logic: Since gravity is a DC component (0 Hz) or changes very slowly during orientation shifts, the high-pass filter blocks frequencies below the cutoff while allowing rapid human movements to pass.Parameters: * Cutoff Frequency: $0.6 \, Hz$ (Optimized to remove gravity without attenuating slow intentional movements).Result: The output is Linear Acceleration, centered around $0 \, m/s^2$ when the device is at rest.
+### Smoothing
 
-2. Gyroscope: Bias and Drift Removal
+Despite removing the gravitational components and static bias, the signals still exhibited high-frequency artifacts characterized by abrupt, sharp peaks. These rapid fluctuations—occurring on a millisecond scale—are physically inconsistent with intentional human motion and likely stem from electronic noise or sensor jitter. To eliminate these artifacts, we evaluated two smoothing techniques: Moving Average and the Savitzky-Golay filter.
 
-Gyroscope sensors often suffer from a "Static Bias"—a non-zero reading even when the device is perfectly still. Over time, this bias can "drift" due to thermal changes or electrical noise. If left uncorrected, these errors accumulate during integration, leading to massive inaccuracies in angular displacement.Method: A 2nd-order Butterworth High-Pass Filter.Logic: We employ a dynamic removal strategy. By setting a very low cutoff frequency, the filter continuously identifies the "average" offset (the Bias) and subtracts it from the signal in real-time.Parameters:Cutoff Frequency: $0.1 \, Hz$ (Designed to eliminate slow-moving sensor drift while preserving the integrity of rotational velocity).Result: A zero-mean rotational signal, significantly reducing "integration drift."
+While the Moving Average filter effectively reduced noise, it tended to "smear" the signal, causing a loss of important peak information and shifting the temporal alignment of the motion. In contrast, the Savitzky-Golay filter was selected because it uses local polynomial regression to smooth the data while better preserving the original shape and height of the signal's peaks. This allowed us to suppress the noise without compromising the dynamic characteristics of the hand gestures.
 
-3. Implementation Details
+## Features Extracion
 
-Zero-Phase Distortion: All filters are implemented using scipy.signal.filtfilt. This performs a forward-backward pass, ensuring that the filtered signal has zero phase-shift, keeping the sensor data perfectly synchronized with the original timestamps.Sampling Consistency: All processing is performed at a fixed sampling rate of $500 \, Hz$ (following the resampling stage) to maintain a stable Nyquist frequency for the digital filters.
+For each sample 82 features were extracted:
 
-## Data Analysis
-The `analyze_data.py` script provides comprehensive statistical analysis of the IMU sensor data collected during the study.
+1. Statistical Time-Domain Features
+* Mean: The average value of the signal.
+* Variance: Measures the spread of the data points.
+* Min / Max: The extreme values reached during the movment.
+* Median: The middle value of the signal.
+* Delta Min-Max: The total range of the signal ($Max - Min$).
+* Skewness: Measures the asymmetry of the signal distribution around its mean.
+* Intensity: Represents the overall magnitude of the movement (calculated as the sum of absolute values).
+* ZCR (Zero Crossing Rate): The rate at which the signal changes sign. High ZCR often indicates rapid oscillations.
 
-### Comparative Analysis
-The script conducts a comparison of sensor data between Left and Right hand recordings by:
-1. Collecting statistics from all files within each directory (Left/Right subdirectories)
-2. Grouping data by file type (accelerometer/gyroscope) and axis (X, Y, Z)
-3. Displaying comparison tables showing count and mean values for each file
+2. Count & Index Features
+* Count Positive / Negative: The number of samples with values above or below zero.
+* Argmax / Argmin: The temporal indices (time steps) where the signal reaches its maximum and minimum values.
 
-This allows for identification of differences in sensor behavior between left-handed and right-handed recordings.
+3. Correlation Features
 
-### Visualization
-The script generates a comprehensive visualization saved as `left_vs_right_comparison.png`, which includes 6 subplots (3 for accelerometer and 3 for gyroscope) for all the axis of the sensors. Each subplot contain the mean value over the spesific axes for all the files:
+These features capture the relationships between different axes, sensors, and pre-defined gesture patterns to identify complex movement signatures:
+* Cross-Sensor Correlation
+** Gyro-Accel Correlation (gyro_accel_corr): Measures the linear relationship between the Gyroscope (Y-axis) and Accelerometer (X-axis).
+** Gyro-Gyro Correlation (gyro_gyro_corr): Measures the relationship between the Y and X axes of the Gyroscope to capture rotational patterns.
+* Template Matching (Leave-One-Out):
+To improve classification accuracy, the system compares the current signal against dynamic templates for "Left" and "Right" gestures using the Pearson correlation coefficient:
 
-![left vs right sensors values plot](/left_vs_right_comparison.png)
+** Correlation with Right Template: Measures how closely the current signal matches the average "Right" hand gesture profile.
 
-This visualization helps identify patterns and differences in accelerometer and gyroscope readings between left and right-handed device usage.
+** Correlation with Left Template: Measures how closely the current signal matches the average "Left" hand gesture profile.
+
+** Leave-One-Out Adjustment: During training, templates are dynamically adjusted to exclude the current sample, ensuring the correlation score is not biased by the sample's own data
+
+## Features Selection
+
+To optimize the model and reduce dimensionality, we removed redundant features—specifically those with a correlation coefficient higher than 0.9. High correlation suggests that one feature can be largely predicted from another.
+
+​For each pair of highly correlated features, we decided which one to retain by calculating the correlation between each feature and the target label (Left or Right hand). The feature with the lower correlation to the label was removed, ensuring that we kept the most informative predictors.
+
+​Through this process, we eliminated [number] redundant features, resulting in a final set of [number] features.
+
+## Random Forest Classifier
 
 ___
 [^1] A. Akhmetyanov, A. Kornilova, M. Faizullin, D. Pozo and G. Ferrer, "Sub-millisecond Video Synchronization of Multiple Android Smartphones," 2021 IEEE Sensors, 2021, pp. 1-4
