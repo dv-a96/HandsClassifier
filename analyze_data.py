@@ -981,43 +981,60 @@ def plot_stats_outliers(stats_csv_path, axis_name='z_sg', save_path=None):
         plt.show()
 
 def create_global_summary(stats_dir: str, out_path: str = None) -> pd.DataFrame:
-    all_data = []
+    all_stats = []
+    all_corrs = []
+    
     files = glob.glob(os.path.join(stats_dir, "*_stats.csv"))
     
     for fpath in files:
         df = pd.read_csv(fpath)
         filename = os.path.basename(fpath)
-        parts = filename.split('_')
+        hand = filename.split('_')[0].capitalize()
+        sensor = 'Accel' if 'accel' in filename else 'Gyro'
         
-        df['hand'] = parts[0].capitalize()
-        
-        # זיהוי סנסור - הוספנו תמיכה בקבצי correlation
-        if 'accel' in filename:
-            df['sensor'] = 'Accel'
-        elif 'gyro' in filename or 'correlation' in filename:
-            df['sensor'] = 'Gyro'
+        df['hand'] = hand
+        df['sensor'] = sensor
+
+        # הפרדה בין קבצי קורלציה לקבצי סטטיסטיקה
+        if 'correlation' in filename or 'corr' in filename:
+            # בקבצי קורלציה אין עמודת axis, נוסיף ערך 'Global' כדי לסמן זאת
+            df['axis'] = 'Global'
+            all_corrs.append(df)
         else:
-            df['sensor'] = 'Unknown'
-            
-        all_data.append(df)
+            all_stats.append(df)
     
-    if not all_data:
+    if not all_stats and not all_corrs:
         return None
 
-    master_df = pd.concat(all_data, ignore_index=True)
-    group_cols = ['hand', 'sensor', 'axis']
+    # 1. אגרגציה לפי ציר (x_sg, y_sg, z_sg) עבור סטטיסטיקות
+    master_stats = pd.concat(all_stats, ignore_index=True)
+    group_cols_stats = ['hand', 'sensor', 'axis']
+    stat_cols = [c for c in master_stats.columns if c not in group_cols_stats + ['filename']]
     
-    # הפונקציה תמצא אוטומטית את העמודות החדשות (gyro_accel_corr וכו') ותעשה להן ממוצע
-    stat_cols = [c for c in master_df.columns if c not in group_cols + ['filename', 'filename_clean', 'label_from_corr']]
-    agg_dict = {col: ['mean', 'std'] for col in stat_cols}
-    
-    summary = master_df.groupby(group_cols).agg(agg_dict)
-    summary.columns = [f"{col[0]}_{'avg' if col[1]=='mean' else 'std_dev'}" for col in summary.columns]
-    summary = summary.reset_index()
+    summary_stats = master_stats.groupby(group_cols_stats).agg({col: ['mean', 'std'] for col in stat_cols})
+    summary_stats.columns = [f"{col[0]}_{'avg' if col[1]=='mean' else 'std_dev'}" for col in summary_stats.columns]
+    summary_stats = summary_stats.reset_index()
+
+    # 2. אגרגציה גלובלית (ללא ציר) עבור קורלציות
+    if all_corrs:
+        master_corrs = pd.concat(all_corrs, ignore_index=True)
+        # כאן אנחנו לא מקבצים לפי axis, כי הוא תמיד 'Global'
+        group_cols_corr = ['hand', 'sensor', 'axis'] 
+        corr_cols = [c for c in master_corrs.columns if c not in group_cols_corr + ['filename_clean', 'label_from_corr']]
+        
+        summary_corr = master_corrs.groupby(group_cols_corr).agg({col: ['mean', 'std'] for col in corr_cols})
+        summary_corr.columns = [f"{col[0]}_{'avg' if col[1]=='mean' else 'std_dev'}" for col in summary_corr.columns]
+        summary_corr = summary_corr.reset_index()
+        
+        # איחוד של שתי הטבלאות (שורות הסטטיסטיקה ושורות הקורלציה הגלובליות)
+        final_summary = pd.concat([summary_stats, summary_corr], ignore_index=True)
+    else:
+        final_summary = summary_stats
 
     if out_path:
-        summary.to_csv(out_path, index=False)
-    return summary
+        final_summary.to_csv(out_path, index=False)
+    return final_summary
+
 
 def plot_hand_summery_comparison(summary_df: pd.DataFrame, sensor_type: str, metric: str, save_path: str=None):
     """
