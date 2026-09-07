@@ -138,7 +138,7 @@ def train_hand_classifier(train_features_df):
 
     return X, rf_model, le
 
-def predict_and_evaluate(test_files, selected_features, rf_model, le, template_left, template_right):
+def predict_and_evaluate(test_files, selected_features, rf_model, le, template_left, template_right, save_path=None):
     X_test, y_test = extract_test_features(test_files, template_left, template_right, selected_features)
     y_test_encoded = le.transform(y_test)  # Encode the test labels using the same encoder as training
     # 5. Model Evaluation
@@ -157,7 +157,10 @@ def predict_and_evaluate(test_files, selected_features, rf_model, le, template_l
     disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=le.classes_)
     disp.plot(cmap='Blues', ax=ax)
     plt.title('Confusion Matrix: Left vs Right')
-    plt.show()
+    if save_path:
+        plt.savefig(os.path.join(save_path, 'confusion_matrix.png'))
+    else:
+        plt.show()
     
     # 6. Feature Importance Visualization
     # Analyzes which features (e.g., Intensity, Mean) had the most impact on the classification
@@ -170,7 +173,10 @@ def predict_and_evaluate(test_files, selected_features, rf_model, le, template_l
     sns.barplot(x='importance', y='feature', data=feature_importance_df.head(15))
     plt.title('Top 15 Most Important Features')
     plt.tight_layout()
-    plt.show()
+    if save_path:
+        plt.savefig(os.path.join(save_path, 'feature_importance.png'))
+    else:
+        plt.show()
     
     return y_pred
 
@@ -178,4 +184,4 @@ train_ids, test_ids = split_train_test('New/Smoothed', 0.3, 42)
 train_df, template_left, template_right, selected_features = extract_train_features(train_ids)
 X_test, y_test = extract_test_features(test_ids, template_left, template_right, selected_features)
 X, model , le = train_hand_classifier(train_df)
-y_pred = predict_and_evaluate(test_ids, selected_features, model, le, template_left, template_right)
+y_pred = predict_and_evaluate(test_ids, selected_features, model, le, template_left, template_right, save_path='Results')
